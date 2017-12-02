@@ -22,7 +22,18 @@ def xmlParser(f_path):
   xmax = -1
   ymin = -1
   ymax = -1
-  name = 'none'
+  name = 0
+
+
+  infile = open("label.txt", "r")
+  lines = infile.readlines()
+
+  lines = map(lambda s: s.strip(), lines)
+  label_dict = {}
+  for l in lines:
+    elements = l.split()
+    label_dict[elements[0]] = elements[1]
+
 
   for elem in tree.iter():
     tag = elem.tag
@@ -35,22 +46,23 @@ def xmlParser(f_path):
     elif tag == 'ymax':
       ymax = int(elem.text)
     elif tag == 'name':
-      name = elem.text
+      name = label_dict[elem.text]
 
 
   return name, xmin, xmax, ymin, ymax;
 
 
 if __name__ == '__main__':
-  datapath = '/home/hhwu/tensorflow_work/TX2_tracking/data_training/bird1'
+  #datapath = '/home/hhwu/tensorflow_work/TX2_tracking/data_training/bird1'
+  datapath = sys.argv[1]
   print "Path: ", datapath
 
 
   file_list = []
   for dirpath, dirnames, filenames in os.walk(datapath):
-    print "dirpath: ", dirpath
-    print "dirnames: ", dirnames
-    print "The number of files: %d" % len(filenames)
+    #print "dirpath: ", dirpath
+    #print "dirnames: ", dirnames
+    #print "The number of files: %d" % len(filenames)
     
     file_list = filenames
 
@@ -67,75 +79,77 @@ if __name__ == '__main__':
   xml_list = sorted(xml_list)
   assert len(image_list) == len(xml_list)
 
-  for xml_elem in xml_list:
-    f_path = "%s/%s" % (datapath,xml_elem)
-    print "Path: ", f_path
- 
-    label, xmin, xmax, ymin, ymax = xmlParser(f_path)
 
-    print "label: ", label
-    print "xmin: ", xmin
-    print "xmax: ", xmax
-    print "ymin: ", ymin
-    print "ymax: ", ymax
 
-#    feature = {'train/label': _int64_feature(label_list[j]),
-#               'train/image': _bytes_feature(tf.compat.as_bytes(data_list[j].tostring()))}
-#  image_counter = 0
-#  data_dict = {}
-#  for i in xrange(0,len(idx)):
-#    if i % file_size == 0:
-#      if i == 0:
-#        data_list  = []
-#        label_list = []
-#      else:
-#        output_name = "train_%d.tfrecords" % image_counter
-#        writer = tf.python_io.TFRecordWriter(output_name)
-#
-#        for j in xrange(0, len(label_list)):
-#          feature = {'train/label': _int64_feature(label_list[j]),
-#                     'train/image': _bytes_feature(tf.compat.as_bytes(data_list[j].tostring()))}
-#          # Create an example protocol buffer
-#          example = tf.train.Example(features=tf.train.Features(feature=feature))
-#    
-#          # Serialize to string and write on the file
-#          writer.write(example.SerializeToString())
-#
-#        print "File %s is written." % output_name
-#        data_list = []
-#        label_list = []
-#        image_counter += 1
-#        print i
-#    
-#
-#    absfile = os.path.join(dirpath, image_name[idx[i]]) 
-#    target_img = io.imread(absfile)
-#    data_list.append(target_img)
-#    label_list.append(int(class_dict[image_name[idx[i]].split("_")[0]]))
-#    #print class_name[image_name[idx[i]].split('_')[0]]
-#    #print image_name[idx[i]].split('_')[0]
-#
-#  #output_name = "train_%d.bin" % image_counter
-#  #ouf = open(output_name, 'w')
-#  #cPickle.dump(data_dict, ouf, 1)
-#  #print "File %s is written." % output_name
-#
-#  output_name = "train_%d.tfrecords" % image_counter
-#  writer = tf.python_io.TFRecordWriter(output_name)
-#  data_list
-#  label_list
-#
-#  for j in xrange(0, len(label_list)):
-#    feature = {'train/label': _int64_feature(label_list[j]),
-#               'train/image': _bytes_feature(tf.compat.as_bytes(data_list[j].tostring()))}
-#    # Create an example protocol buffer
-#    example = tf.train.Example(features=tf.train.Features(feature=feature))
-#  
-#    # Serialize to string and write on the file
-#    writer.write(example.SerializeToString())
-#
-#  print "File %s is written." % output_name
+
+  #for xml_elem in xml_list:
+
+  order_idx = np.random.randint(0,len(xml_list),len(xml_list))
+  train_idx = order_idx[:int(0.8*len(xml_list))]
+  valid_idx = order_idx[int(0.8*len(xml_list)):]
+
+
+  output_name = "train_1.tfrecords"
+  writer = tf.python_io.TFRecordWriter(output_name)
+  for i in train_idx:
+    xml_f_path = "%s/%s" % (datapath, xml_list[i])
+    jpg_f_path = "%s/%s" % (datapath, image_list[i])
+    #print "Path: ", f_path
  
+    label, xmin, xmax, ymin, ymax = xmlParser(xml_f_path)
+    target_img = io.imread(jpg_f_path)
+
+    #print "label: ", label
+    #print "xmin: ", xmin
+    #print "xmax: ", xmax
+    #print "ymin: ", ymin
+    #print "ymax: ", ymax
+
+    feature = {'train/label': _int64_feature(int(label)),
+               'train/xmin' : _int64_feature(int(xmin)),
+               'train/xmax' : _int64_feature(int(xmax)),
+               'train/ymin' : _int64_feature(int(ymin)),
+               'train/ymax' : _int64_feature(int(ymax)),
+               'train/image': _bytes_feature(tf.compat.as_bytes(target_img.tostring()))}
+
+    # Create an example protocol buffer
+    example = tf.train.Example(features=tf.train.Features(feature=feature))
+
+    # Serialize to string and write on the file
+    writer.write(example.SerializeToString())
+
+  print "File %s is written." % output_name
+
+  output_name = "valid_1.tfrecords"
+  writer = tf.python_io.TFRecordWriter(output_name)
+  for i in valid_idx:
+    xml_f_path = "%s/%s" % (datapath, xml_list[i])
+    jpg_f_path = "%s/%s" % (datapath, image_list[i])
+    #print "Path: ", f_path
+ 
+    label, xmin, xmax, ymin, ymax = xmlParser(xml_f_path)
+    target_img = io.imread(jpg_f_path)
+
+    #print "label: ", label
+    #print "xmin: ", xmin
+    #print "xmax: ", xmax
+    #print "ymin: ", ymin
+    #print "ymax: ", ymax
+
+    feature = {'train/label': _int64_feature(int(label)),
+               'train/xmin' : _int64_feature(int(xmin)),
+               'train/xmax' : _int64_feature(int(xmax)),
+               'train/ymin' : _int64_feature(int(ymin)),
+               'train/ymax' : _int64_feature(int(ymax)),
+               'train/image': _bytes_feature(tf.compat.as_bytes(target_img.tostring()))}
+
+    # Create an example protocol buffer
+    example = tf.train.Example(features=tf.train.Features(feature=feature))
+
+    # Serialize to string and write on the file
+    writer.write(example.SerializeToString())
+
+  print "File %s is written." % output_name
 
 
 
