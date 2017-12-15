@@ -30,9 +30,7 @@ car24            29
 car3             30
 car4             31
 car5             32
-car6             33
 car7             34
-car8             35
 car9             36
 drone1           37
 drone2           38
@@ -78,7 +76,6 @@ riding11         77
 riding12         78
 riding13         79
 riding14         80
-riding15         81
 riding16         82
 riding17         83
 riding2          84
@@ -87,7 +84,6 @@ riding4          86
 riding5          87
 riding6          88
 riding7          89
-riding8          90
 riding9          91
 truck1           92
 truck2           93

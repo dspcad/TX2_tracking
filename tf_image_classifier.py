@@ -7,6 +7,8 @@ import tensorflow as tf
 import time
 from PIL import Image
 from skimage import io
+from skimage import transform
+
 #import matplotlib.pyplot as plt
 
 def cropImg(target_img):
@@ -15,15 +17,18 @@ def cropImg(target_img):
   #       shape[1]: width       #
   ###############################
   #mean_pixel = [123.182570556, 116.282672124, 103.462011796]
-  floating_img = np.empty(target_img.shape, dtype=np.float32)
 
 
   #floating_img[:,:,0] = target_img[:,:,0] - mean_pixel[0]
   #floating_img[:,:,1] = target_img[:,:,1] - mean_pixel[1]
   #floating_img[:,:,2] = target_img[:,:,2] - mean_pixel[2]
 
+  print target_img
   #floating_img = target_img - mean_img
+  floating_img = np.empty(target_img.shape, dtype=np.float32)
   floating_img = target_img
+  target_img = transform.resize(floating_img, (640,640,3))
+
 
 
   #floating_img = tf.image.random_flip_left_right(floating_img)
@@ -43,12 +48,13 @@ def cropImg(target_img):
   #height_shift = np.random.randint(0,256-224)
   #width_shift  = np.random.randint(0,256-224)
 
-  height_shift = 16
-  width_shift  = 16
-  target_img = floating_img[height_shift:height_shift+224, width_shift:width_shift+224,:]
+  #height_shift = 16
+  #width_shift  = 16
+  ##target_img = floating_img[height_shift:height_shift+224, width_shift:width_shift+224,:]
+  #target_img = floating_img[height_shift:height_shift+224, width_shift:width_shift+224,:]
 
 
-  print "crop training image..."
+  print "resize image into 640x640"
   return target_img
 
 
@@ -73,17 +79,17 @@ if __name__ == '__main__':
   mini_batch = 128
 
   K = 98 # number of classes
-  NUM_FILTER_1 = 32
-  NUM_FILTER_2 = 32
-  NUM_FILTER_3 = 64
-  NUM_FILTER_4 = 64
-  NUM_FILTER_5 = 128
-  NUM_FILTER_6 = 128
-  NUM_FILTER_7 = 256
-  NUM_FILTER_8 = 256
+  NUM_FILTER_1 = 16
+  NUM_FILTER_2 = 16
+  NUM_FILTER_3 = 32
+  NUM_FILTER_4 = 32
+  NUM_FILTER_5 = 64
+  NUM_FILTER_6 = 64
+  NUM_FILTER_7 = 128
+  NUM_FILTER_8 = 128
 
-  NUM_NEURON_1 = 4096
-  NUM_NEURON_2 = 4096
+  NUM_NEURON_1 = 1024
+  NUM_NEURON_2 = 1024
 
   DROPOUT_PROB = 0.50
 
@@ -95,7 +101,7 @@ if __name__ == '__main__':
 
 
   # initialize parameters randomly
-  X  = tf.placeholder(tf.float32, shape=[None, 224,224,3])
+  X  = tf.placeholder(tf.float32, shape=[None, 320,320,3])
   Y_ = tf.placeholder(tf.float32, shape=[None,K])
 
 
@@ -108,7 +114,7 @@ if __name__ == '__main__':
   W7  = tf.get_variable("W7", shape=[3,3,NUM_FILTER_6,NUM_FILTER_7], initializer=tf.contrib.layers.xavier_initializer())
   W8  = tf.get_variable("W8", shape=[3,3,NUM_FILTER_7,NUM_FILTER_8], initializer=tf.contrib.layers.xavier_initializer())
 
-  W9  = tf.get_variable("W9", shape=[14*14*NUM_FILTER_8,NUM_NEURON_1], initializer=tf.contrib.layers.xavier_initializer())
+  W9  = tf.get_variable("W9", shape=[5*5*NUM_FILTER_8,NUM_NEURON_1], initializer=tf.contrib.layers.xavier_initializer())
   W10 = tf.get_variable("W10", shape=[NUM_NEURON_1,NUM_NEURON_2], initializer=tf.contrib.layers.xavier_initializer())
   W11 = tf.get_variable("W11", shape=[NUM_NEURON_2,K], initializer=tf.contrib.layers.xavier_initializer())
 
@@ -137,14 +143,16 @@ if __name__ == '__main__':
   pool2 = tf.nn.max_pool(conv4, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
 
   conv5 = tf.nn.relu(tf.nn.conv2d(pool2, W5, strides=[1,1,1,1], padding='SAME')+b5)
-  conv6 = tf.nn.relu(tf.nn.conv2d(conv5, W6, strides=[1,1,1,1], padding='SAME')+b6)
-  pool3 = tf.nn.max_pool(conv6, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+  pool3 = tf.nn.max_pool(conv5, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+  conv6 = tf.nn.relu(tf.nn.conv2d(pool3, W6, strides=[1,1,1,1], padding='SAME')+b6)
+  pool4 = tf.nn.max_pool(conv6, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
 
-  conv7 = tf.nn.relu(tf.nn.conv2d(pool3, W7, strides=[1,1,1,1], padding='SAME')+b7)
-  conv8 = tf.nn.relu(tf.nn.conv2d(conv7, W8, strides=[1,1,1,1], padding='SAME')+b8)
-  pool4 = tf.nn.max_pool(conv8, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+  conv7 = tf.nn.relu(tf.nn.conv2d(pool4, W7, strides=[1,1,1,1], padding='SAME')+b7)
+  pool5 = tf.nn.max_pool(conv7, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+  conv8 = tf.nn.relu(tf.nn.conv2d(pool5, W8, strides=[1,1,1,1], padding='SAME')+b8)
+  pool6 = tf.nn.max_pool(conv8, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
 
-  YY = tf.reshape(pool4, shape=[-1,14*14*NUM_FILTER_8])
+  YY = tf.reshape(pool6, shape=[-1,5*5*NUM_FILTER_8])
 
   fc1 = tf.nn.relu(tf.matmul(YY,W9)+b9)
   fc1_drop = tf.nn.dropout(fc1, keep_prob)
@@ -167,26 +175,36 @@ if __name__ == '__main__':
 
 
   correct_prediction = tf.equal(tf.argmax(Y, 1), tf.argmax(Y_, 1))
+  correct_sum = tf.reduce_sum(tf.cast(correct_prediction, tf.float32))
   accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
 
   #train_data_path = []
   #for name in label_dict.keys():
-  #  print "/home/hhwu/tracking/tf_data/train/train_%s.tfrecords" % name
-  #  train_data_path.append("/home/hhwu/tracking/tf_data/train/train_%s.tfrecords" % name)
+  #  print "/home/hhwu/tracking/data_training/train_%s.tfrecords" % name
+  #  train_data_path.append("/home/hhwu/tracking/data_training/train_%s.tfrecords" % name)
   #  #train_data_path.append("/mnt/ramdisk/tf_data/train_%d.tfrecords" % i)
 
+  #train_data_path = []
+  #for i in range(1,8):
+  #  train_data_path.append("/home/hhwu/tracking/crop_data/train_boat%d.tfrecords" % i)
   #train_data_path = "/home/hhwu/tracking/tf_data/train/train_person3.tfrecords"
-  train_data_path = "/home/hhwu/tracking/crop_data/train_all.tfrecords"
+  train_data_path = "/home/hhwu/tracking/data_training/train_all.tfrecords"
+  valid_data_path = "/home/hhwu/tracking/data_training/valid_all.tfrecords"
+  #train_data_path = "/home/hhwu/tracking/crop_data/train_boat8.tfrecords"
 
   with tf.Session() as sess:
     ################################
     #        Training Data         #
     ################################
     train_feature = {'train/image': tf.FixedLenFeature([], tf.string),
+                     'train/xmin' : tf.FixedLenFeature([], tf.int64),
+                     'train/xmax' : tf.FixedLenFeature([], tf.int64),
+                     'train/ymin' : tf.FixedLenFeature([], tf.int64),
+                     'train/ymax' : tf.FixedLenFeature([], tf.int64),
                      'train/label': tf.FixedLenFeature([], tf.int64)}
     # Create a list of filenames and pass it to a queue
-    #train_filename_queue = tf.train.string_input_producer(train_data_path)
+    #train_filename_queue = tf.train.string_input_producer(train_data_path, shuffle=True)
     train_filename_queue = tf.train.string_input_producer([train_data_path])
     #filename_queue = tf.train.string_input_producer([data_path], num_epochs=1)
     # Define a reader and read the next record
@@ -203,9 +221,9 @@ if __name__ == '__main__':
     train_label_idx = tf.cast(train_features['train/label'], tf.int32)
     train_label = tf.one_hot(train_label_idx, K)
     # Reshape image data into the original shape
-    train_image = tf.reshape(train_image, [256, 256, 3])
+    train_image = tf.reshape(train_image, [360, 640, 3])
 
-    train_image = cropImg(train_image)
+    train_image = tf.image.resize_images(train_image, [320, 320])
 
     #print "TFRecord: hhwu !"
     train_images, train_labels = tf.train.batch([train_image, train_label], 
@@ -215,38 +233,45 @@ if __name__ == '__main__':
     ################################
     #       Validation Data        #
     ################################
-#    valid_feature = {'valid/image': tf.FixedLenFeature([], tf.string),
-#                     'valid/label': tf.FixedLenFeature([], tf.int64)}
-#    # Create a list of filenames and pass it to a queue
-#    valid_filename_queue = tf.train.string_input_producer([valid_data_path])
-#    #filename_queue = tf.train.string_input_producer([data_path], num_epochs=1)
-#    # Define a reader and read the next record
-#    valid_reader = tf.TFRecordReader()
-#    _, valid_serialized_example = valid_reader.read(valid_filename_queue)
-#
-#        # Decode the record read by the reader
-#    valid_features = tf.parse_single_example(valid_serialized_example, features=valid_feature)
-#    # Convert the image data from string back to the numbers
-#    valid_image = tf.cast(tf.decode_raw(valid_features['valid/image'], tf.uint8), tf.float32)
-#    
-#    # Cast label data into int32
-#    valid_label_idx = tf.cast(valid_features['valid/label'], tf.int32)
-#    valid_label = tf.one_hot(valid_label_idx, K)
-#    # Reshape image data into the original shape
-#    valid_image = tf.reshape(valid_image, [256, 256, 3])
-#
-#    valid_image = validCropImg(valid_image, mean_img)
-#    
-#    valid_images, valid_labels = tf.train.batch([valid_image, valid_label], 
-#                                                 batch_size=100, capacity=5000, num_threads=4)
+    valid_feature = {'valid/image': tf.FixedLenFeature([], tf.string),
+                     'valid/xmin' : tf.FixedLenFeature([], tf.int64),
+                     'valid/xmax' : tf.FixedLenFeature([], tf.int64),
+                     'valid/ymin' : tf.FixedLenFeature([], tf.int64),
+                     'valid/ymax' : tf.FixedLenFeature([], tf.int64),
+                     'valid/label': tf.FixedLenFeature([], tf.int64)}
+    # Create a list of filenames and pass it to a queue
+    valid_filename_queue = tf.train.string_input_producer([valid_data_path])
+    #filename_queue = tf.train.string_input_producer([data_path], num_epochs=1)
+    # Define a reader and read the next record
+    valid_reader = tf.TFRecordReader()
+    _, valid_serialized_example = valid_reader.read(valid_filename_queue)
+
+        # Decode the record read by the reader
+    valid_features = tf.parse_single_example(valid_serialized_example, features=valid_feature)
+    # Convert the image data from string back to the numbers
+    valid_image = tf.cast(tf.decode_raw(valid_features['valid/image'], tf.uint8), tf.float32)
+    
+    # Cast label data into int32
+    valid_label_idx = tf.cast(valid_features['valid/label'], tf.int32)
+    valid_label = tf.one_hot(valid_label_idx, K)
+    # Reshape image data into the original shape
+    valid_image = tf.reshape(valid_image, [360, 640, 3])
+
+    valid_image = tf.image.resize_images(valid_image, [320, 320])
+    
+    valid_images, valid_labels = tf.train.batch([valid_image, valid_label], 
+                                                 batch_size=100, capacity=2000, num_threads=16)
 
 
 
 
     #sess.run(tf.global_variables_initializer())
     # Initialize all global and local variables
-    init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
-    sess.run(init_op)
+    #init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+    #sess.run(init_op)
+
+    sess.run(tf.global_variables_initializer())
+    sess.run(tf.local_variables_initializer())
 
     # Restore variables from disk.
     #saver.restore(sess, "./checkpoint/model_200000.ckpt")
@@ -287,14 +312,14 @@ if __name__ == '__main__':
                                                                 cross_entropy.eval(feed_dict={X: x, Y_: y, keep_prob: 1.0}),
                                                                 accuracy.eval(feed_dict={X: x, Y_: y, keep_prob: 1.0}))
 
-#      if itr % 1000 == 0:
-#        valid_accuracy = 0.0
-#        for i in range(0,500):
-#          test_x, test_y = sess.run([valid_images, valid_labels])
-#          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, keep_prob: 1.0, learning_rate: LEARNING_RATE})
-#        print "Validation Accuracy: %f (%.1f/50000)" %  (valid_accuracy/50000, valid_accuracy)
-#        valid_result.write("Validation Accuracy: %f" % (valid_accuracy/50000))
-#        valid_result.write("\n")
+      if itr % 100 == 0:
+        valid_accuracy = 0.0
+        for i in range(0,200):
+          test_x, test_y = sess.run([valid_images, valid_labels])
+          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, keep_prob: 1.0})
+        print "Validation Accuracy: %f (%.1f/20000)" %  (valid_accuracy/20000, valid_accuracy)
+        #valid_result.write("Validation Accuracy: %f" % (valid_accuracy/20000))
+        #valid_result.write("\n")
 
        
 
