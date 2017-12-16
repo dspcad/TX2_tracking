@@ -79,6 +79,7 @@ if __name__ == '__main__':
   mini_batch = 128
 
   K = 98 # number of classes
+  P = 4  # four parameters of the bounding boxes
   NUM_FILTER_1 = 16
   NUM_FILTER_2 = 16
   NUM_FILTER_3 = 32
@@ -103,6 +104,7 @@ if __name__ == '__main__':
   # initialize parameters randomly
   X  = tf.placeholder(tf.float32, shape=[None, 320,320,3])
   Y_ = tf.placeholder(tf.float32, shape=[None,K])
+  COOR = tf.placeholder(tf.float32, shape=[None,P])
 
 
   W1  = tf.get_variable("W1", shape=[3,3,3,NUM_FILTER_1], initializer=tf.contrib.layers.xavier_initializer())
@@ -117,6 +119,7 @@ if __name__ == '__main__':
   W9  = tf.get_variable("W9", shape=[5*5*NUM_FILTER_8,NUM_NEURON_1], initializer=tf.contrib.layers.xavier_initializer())
   W10 = tf.get_variable("W10", shape=[NUM_NEURON_1,NUM_NEURON_2], initializer=tf.contrib.layers.xavier_initializer())
   W11 = tf.get_variable("W11", shape=[NUM_NEURON_2,K], initializer=tf.contrib.layers.xavier_initializer())
+  W12 = tf.get_variable("W12", shape=[NUM_NEURON_2,P], initializer=tf.contrib.layers.xavier_initializer())
 
 
 
@@ -131,6 +134,7 @@ if __name__ == '__main__':
   b9  = tf.Variable(tf.constant(0.1, shape=[NUM_NEURON_1], dtype=tf.float32), trainable=True, name='b9')
   b10 = tf.Variable(tf.constant(0.1, shape=[NUM_NEURON_2], dtype=tf.float32), trainable=True, name='b10')
   b11 = tf.Variable(tf.constant(0.1, shape=[K], dtype=tf.float32), trainable=True, name='b11')
+  b12 = tf.Variable(tf.constant(0.1, shape=[P], dtype=tf.float32), trainable=True, name='b12')
 
 
   #===== architecture =====#
@@ -162,6 +166,7 @@ if __name__ == '__main__':
 
   Y = tf.matmul(fc2_drop,W11)+b11
 
+  COOR = tf.matmul(fc2_drop,W12)+b12
 
 
   cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y))
@@ -220,14 +225,26 @@ if __name__ == '__main__':
     # Cast label data into int32
     train_label_idx = tf.cast(train_features['train/label'], tf.int32)
     train_label = tf.one_hot(train_label_idx, K)
+
+    train_label_xmin = tf.cast(train_features['train/xmin'], tf.float32)
+    train_label_xmax = tf.cast(train_features['train/xmax'], tf.float32)
+    train_label_ymin = tf.cast(train_features['train/ymin'], tf.float32)
+    train_label_ymax = tf.cast(train_features['train/ymax'], tf.float32)
+
+
+
     # Reshape image data into the original shape
     train_image = tf.reshape(train_image, [360, 640, 3])
 
     train_image = tf.image.resize_images(train_image, [320, 320])
 
+    train_label_box_coor = tf.stack([train_label_xmin, train_label_xmax, train_label_ymin, train_label_ymax])
+
     #print "TFRecord: hhwu !"
-    train_images, train_labels = tf.train.batch([train_image, train_label], 
+    train_images, train_labels, tr_box_coors = tf.train.batch([train_image, train_label, train_label_box_coor], 
                                                  batch_size=mini_batch, capacity=20*mini_batch, num_threads=16)
+    #train_images, train_labels = tf.train.batch([train_image, train_label], 
+    #                                             batch_size=mini_batch, capacity=20*mini_batch, num_threads=16)
 
 
     ################################
@@ -254,12 +271,21 @@ if __name__ == '__main__':
     # Cast label data into int32
     valid_label_idx = tf.cast(valid_features['valid/label'], tf.int32)
     valid_label = tf.one_hot(valid_label_idx, K)
+    valid_label_xmin = tf.cast(valid_features['valid/xmin'], tf.float32)
+    valid_label_xmax = tf.cast(valid_features['valid/xmax'], tf.float32)
+    valid_label_ymin = tf.cast(valid_features['valid/ymin'], tf.float32)
+    valid_label_ymax = tf.cast(valid_features['valid/ymax'], tf.float32)
+
+
     # Reshape image data into the original shape
     valid_image = tf.reshape(valid_image, [360, 640, 3])
 
     valid_image = tf.image.resize_images(valid_image, [320, 320])
+
+    valid_label_box_coor = tf.stack([valid_label_xmin, valid_label_xmax, valid_label_ymin, valid_label_ymax])
     
-    valid_images, valid_labels = tf.train.batch([valid_image, valid_label], 
+
+    valid_images, valid_labels, vl_box_coors = tf.train.batch([valid_image, valid_label, valid_label_box_coor], 
                                                  batch_size=100, capacity=2000, num_threads=16)
 
 
@@ -297,11 +323,14 @@ if __name__ == '__main__':
       #start_time = time.time()
 
       #x, y, image_iterator, data, label = batchSerialRead(image_iterator, data, label)
-      x, y = sess.run([train_images, train_labels])
+      #x, y = sess.run([train_image, train_label])
+      x, y, box_coord = sess.run([train_images, train_labels, tr_box_coors])
+
       #for i in range(0, mini_batch):
       #  io.imsave("%s_%d.%s" % ("test_img", i, 'jpeg'), x[i])
 
-      train_step.run(feed_dict={X: x, Y_: y, keep_prob: DROPOUT_PROB})
+      train_step.run(feed_dict={X: x, Y_: y, 
+                                COOR: box_coord, keep_prob: DROPOUT_PROB})
       #elapsed_time = time.time() - start_time
       #print "Time for training: %f" % elapsed_time
       if itr % 20 == 0:
@@ -315,8 +344,8 @@ if __name__ == '__main__':
       if itr % 100 == 0:
         valid_accuracy = 0.0
         for i in range(0,200):
-          test_x, test_y = sess.run([valid_images, valid_labels])
-          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, keep_prob: 1.0})
+          test_x, test_y, box_coord = sess.run([valid_images, valid_labels, vl_box_coors])
+          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, COOR: box_coord, keep_prob: 1.0})
         print "Validation Accuracy: %f (%.1f/20000)" %  (valid_accuracy/20000, valid_accuracy)
         #valid_result.write("Validation Accuracy: %f" % (valid_accuracy/20000))
         #valid_result.write("\n")
