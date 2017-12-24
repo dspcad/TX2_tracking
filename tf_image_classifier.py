@@ -12,53 +12,13 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"]="6,7"
 #import matplotlib.pyplot as plt
 
-def cropImg(target_img):
+
+def checkIntersection(x, y, BBox):
   ###############################
   #       shape[0]: height      #
   #       shape[1]: width       #
   ###############################
-  #mean_pixel = [123.182570556, 116.282672124, 103.462011796]
 
-
-  #floating_img[:,:,0] = target_img[:,:,0] - mean_pixel[0]
-  #floating_img[:,:,1] = target_img[:,:,1] - mean_pixel[1]
-  #floating_img[:,:,2] = target_img[:,:,2] - mean_pixel[2]
-
-  print target_img
-  #floating_img = target_img - mean_img
-  floating_img = np.empty(target_img.shape, dtype=np.float32)
-  floating_img = target_img
-  target_img = transform.resize(floating_img, (640,640,3))
-
-
-
-  #floating_img = tf.image.random_flip_left_right(floating_img)
-  #target_img = tf.random_crop(floating_img, [224, 224, 3])
-
-  #target_img = tf.image.crop_to_bounding_box(floating_img, 14, 14, 227, 227)
-  #target_img = target_img - mean_img
-
-  #reflection   = np.random.randint(0,2)
-  #if reflection == 0:
-  #  floating_img = np.fliplr(floating_img)
-
-
-  ################################
-  ##      Data Augementation     #
-  ################################
-  #height_shift = np.random.randint(0,256-224)
-  #width_shift  = np.random.randint(0,256-224)
-
-  #height_shift = 16
-  #width_shift  = 16
-  ##target_img = floating_img[height_shift:height_shift+224, width_shift:width_shift+224,:]
-  #target_img = floating_img[height_shift:height_shift+224, width_shift:width_shift+224,:]
-
-
-  print "resize image into 640x640"
-  return target_img
-
-def checkIntersection(x, y, BBox):
   xmin = BBox[0] 
   xmax = BBox[1]
   ymin = BBox[2]
@@ -66,41 +26,59 @@ def checkIntersection(x, y, BBox):
 
   cell_xmin = x*80
   cell_xmax = cell_xmin + 80
-  cell_ymin = y*80
+  cell_ymin = y*60
   cell_ymax = cell_ymin + 80
 
+  #########################################
+  #     BBox intersects the grid cells    #
+  #########################################
   target_x = cell_xmin
   target_y = cell_ymin
-  if target_x > xmin and target_x < xmax and target_y > ymin and target_y < ymax:
+  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
     return 1
 
   target_x = cell_xmax
   target_y = cell_ymin
-  if all([target_x > xmin, target_x < xmax, target_y > ymin, target_y < ymax]):
+  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
     return 1
 
   target_x = cell_xmin
   target_y = cell_ymax
-  if all([target_x > xmin, target_x < xmax, target_y > ymin, target_y < ymax]):
+  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
     return 1
 
   target_x = cell_xmax
   target_y = cell_ymax
-  if all([target_x > xmin, target_x < xmax, target_y > ymin, target_y < ymax]):
+  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
+    return 1
+ 
+ 
+  #########################################
+  #     BBox is within in a grid cell     #
+  #########################################
+  if xmin >= cell_xmin and ymin >= cell_ymin and xmax <= cell_xmax and ymax <= cell_ymax:
     return 1
 
 
-def expandLabel(Y_, BBox_):
-  print "Y_ shape: ",  Y_.shape
-  print "BBox_ shape: ",  BBox_.shape
-  Y_labels_with_grids = np.zeros((mini_batch, K*G))
+  return 0
+
+def expandLabel(Y_, BBox_, batch_size):
+  #print "Y_ shape: ",  Y_.shape
+  #print "BBox_ shape: ",  BBox_.shape
+  Y_labels_with_grids = np.zeros((batch_size, K*G))
   target_classes = np.argmax(Y_, axis=1)
 
-  for idx in range(0, mini_batch):
+  #print "target_classes shape: ",  target_classes.shape
+  #print "Y_labels_with_grids shape: ",  Y_labels_with_grids.shape
+
+  for idx in range(0, batch_size):
     for i in range(0, 8):
-      for j in range(0, 8):
-        #print target_classes[idx]
-        Y_labels_with_grids[idx][target_classes[idx]*64+i+8*j] = checkIntersection(i,j, BBox_[idx])
+      for j in range(0, 6):
+        #print "idx: ", idx
+        #print "i: ", i
+        #print "j: ", j
+        #print target_classes
+        Y_labels_with_grids[idx][target_classes[idx]*48+i*6+j] = checkIntersection(i,j, BBox_[idx])
    
 
   return Y_labels_with_grids
@@ -125,7 +103,7 @@ if __name__ == '__main__':
   mini_batch = 128
 
   K = 98 # number of classes
-  G = 64 # number of grid cells
+  G = 48 # number of grid cells
   P = 4  # four parameters of the bounding boxes
   NUM_FILTER_1 = 64
   NUM_FILTER_2 = 64
@@ -139,7 +117,7 @@ if __name__ == '__main__':
 
   DROPOUT_PROB = 0.50
 
-  LEARNING_RATE = 1e-2
+  LEARNING_RATE = 1e-3
  
 
   # Dropout probability
@@ -147,20 +125,21 @@ if __name__ == '__main__':
 
 
   # initialize parameters randomly
-  X      = tf.placeholder(tf.float32, shape=[None, 640,640,3])
+  X      = tf.placeholder(tf.float32, shape=[None, 360,640,3])
   Y_     = tf.placeholder(tf.float32, shape=[None,K])
   Y_GRID = tf.placeholder(tf.float32, shape=[None,K*G])
 
 
-  W1  = tf.get_variable("W1", shape=[10,10,3,NUM_FILTER_1], initializer=tf.contrib.layers.xavier_initializer())
+  W1  = tf.get_variable("W1", shape=[6,10,3,NUM_FILTER_1], initializer=tf.contrib.layers.xavier_initializer())
   W2  = tf.get_variable("W2", shape=[3,3,NUM_FILTER_1,NUM_FILTER_2], initializer=tf.contrib.layers.xavier_initializer())
   W3  = tf.get_variable("W3", shape=[3,3,NUM_FILTER_2,NUM_FILTER_3], initializer=tf.contrib.layers.xavier_initializer())
   W4  = tf.get_variable("W4", shape=[3,3,NUM_FILTER_3,NUM_FILTER_4], initializer=tf.contrib.layers.xavier_initializer())
   W5  = tf.get_variable("W5", shape=[3,3,NUM_FILTER_4,NUM_FILTER_5], initializer=tf.contrib.layers.xavier_initializer())
   W6  = tf.get_variable("W6", shape=[3,3,NUM_FILTER_5,NUM_FILTER_6], initializer=tf.contrib.layers.xavier_initializer())
 
-  W9  = tf.get_variable("W9", shape=[14*14*NUM_FILTER_6,NUM_NEURON_1], initializer=tf.contrib.layers.xavier_initializer())
+  W9  = tf.get_variable("W9", shape=[12*14*NUM_FILTER_6,NUM_NEURON_1], initializer=tf.contrib.layers.xavier_initializer())
   W10 = tf.get_variable("W10", shape=[NUM_NEURON_1,NUM_NEURON_2], initializer=tf.contrib.layers.xavier_initializer())
+  #W11 = tf.get_variable("W11", shape=[NUM_NEURON_2,K], initializer=tf.contrib.layers.xavier_initializer())
   W11 = tf.get_variable("W11", shape=[NUM_NEURON_2,K*G], initializer=tf.contrib.layers.xavier_initializer())
 
 
@@ -173,11 +152,17 @@ if __name__ == '__main__':
   b6  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_6], dtype=tf.float32), trainable=True, name='b6')
   b9  = tf.Variable(tf.constant(0.1, shape=[NUM_NEURON_1], dtype=tf.float32), trainable=True, name='b9')
   b10 = tf.Variable(tf.constant(0.1, shape=[NUM_NEURON_2], dtype=tf.float32), trainable=True, name='b10')
+  #b11 = tf.Variable(tf.constant(0.1, shape=[K], dtype=tf.float32), trainable=True, name='b11')
   b11 = tf.Variable(tf.constant(0.1, shape=[K*G], dtype=tf.float32), trainable=True, name='b11')
 
+  matrix_w = np.zeros((K*G,K))
+  for i in range(0,K):
+    for j in range(0,G):
+      matrix_w[i*G+j][i] = 1
 
+  label_pred_transform_W = tf.constant(matrix_w, shape=matrix_w.shape, dtype=tf.float32)
   #===== architecture =====#
-  conv1 = tf.nn.relu(tf.nn.conv2d(X,     W1, strides=[1,3,3,1], padding='VALID')+b1)
+  conv1 = tf.nn.relu(tf.nn.conv2d(X,     W1, strides=[1,2,3,1], padding='VALID')+b1)
   conv2 = tf.nn.relu(tf.nn.conv2d(conv1, W2, strides=[1,1,1,1], padding='SAME')+b2)
   pool1 = tf.nn.max_pool(conv2, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
 
@@ -205,7 +190,7 @@ if __name__ == '__main__':
   print "conv6: ", conv6.get_shape()
   print "pool4: ", pool4.get_shape()
 
-  YY = tf.reshape(pool4, shape=[-1,14*14*NUM_FILTER_6])
+  YY = tf.reshape(pool4, shape=[-1,12*14*NUM_FILTER_6])
 
   fc1 = tf.nn.relu(tf.matmul(YY,W9)+b9)
   fc1_drop = tf.nn.dropout(fc1, keep_prob)
@@ -214,9 +199,11 @@ if __name__ == '__main__':
   fc2_drop = tf.nn.dropout(fc2, keep_prob)
 
   Y = tf.matmul(fc2_drop,W11)+b11
+  Y_class = tf.matmul(Y,label_pred_transform_W)
 
 
-  mse_loss = tf.losses.mean_squared_error(labels=Y_GRID, predictions=Y, weights=Y_GRID)
+  #mse_loss = tf.losses.mean_squared_error(labels=Y_GRID, predictions=Y, weights=1e-1)
+  mse_loss = tf.losses.mean_squared_error(labels=Y_GRID, predictions=Y, weights=1e-1*Y_GRID)
   #cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y))
 
   global_step = tf.Variable(0, trainable=False)
@@ -224,10 +211,12 @@ if __name__ == '__main__':
                                   100000, 0.1, staircase=True)
   #train_step = tf.train.MomentumOptimizer(LEARNING_RATE, 0.9, use_nesterov=True).minimize(total_loss)
   train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(mse_loss, global_step=global_step)
+  #train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(cross_entropy, global_step=global_step)
   #train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy, global_step=global_step)
 
 
-  correct_prediction = tf.equal(tf.argmax(Y, 1), tf.argmax(Y_, 1))
+  #correct_prediction = tf.equal(tf.argmax(Y, 1), tf.argmax(Y_, 1))
+  correct_prediction = tf.equal(tf.argmax(Y_class, 1), tf.argmax(Y_, 1))
   correct_sum = tf.reduce_sum(tf.cast(correct_prediction, tf.float32))
   accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
@@ -284,7 +273,7 @@ if __name__ == '__main__':
     # Reshape image data into the original shape
     train_image = tf.reshape(train_image, [360, 640, 3])
 
-    train_image = tf.image.resize_images(train_image, [640, 640])
+    #train_image = tf.image.resize_images(train_image, [640, 640])
 
     train_label_box_coor = tf.stack([train_label_xmin, train_label_xmax, train_label_ymin, train_label_ymax])
 
@@ -328,7 +317,7 @@ if __name__ == '__main__':
     # Reshape image data into the original shape
     valid_image = tf.reshape(valid_image, [360, 640, 3])
 
-    valid_image = tf.image.resize_images(valid_image, [640, 640])
+    #valid_image = tf.image.resize_images(valid_image, [640, 640])
 
     valid_label_box_coor = tf.stack([valid_label_xmin, valid_label_xmax, valid_label_ymin, valid_label_ymax])
     
@@ -373,9 +362,9 @@ if __name__ == '__main__':
       #x, y, image_iterator, data, label = batchSerialRead(image_iterator, data, label)
       #x, y = sess.run([train_image, train_label])
       x, y, box_coord = sess.run([train_images, train_labels, tr_box_coors])
-      print "x shape: ", x.shape
-      Y_labels_with_grid = expandLabel(y, box_coord)
+      Y_labels_with_grid = expandLabel(y, box_coord, mini_batch)
 
+      #print "Y_labels_with_grid: ", Y_labels_with_grid
 
       #for i in range(0, mini_batch):
       #  io.imsave("%s_%d.%s" % ("test_img", i, 'jpeg'), x[i])
@@ -393,10 +382,11 @@ if __name__ == '__main__':
                                                                 #cross_entropy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0}),
                                                                 accuracy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0}))
 
-      if itr % 1000 == 0:
+      if itr % 1000 == 0 and itr != 0:
         valid_accuracy = 0.0
         for i in range(0,200):
           test_x, test_y, box_coord = sess.run([valid_images, valid_labels, vl_box_coors])
+          Y_labels_with_grid = expandLabel(test_y, box_coord, 100)
           
           valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0})
         print "Validation Accuracy: %f (%.1f/20000)" %  (valid_accuracy/20000, valid_accuracy)
