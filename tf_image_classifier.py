@@ -12,6 +12,8 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"]="6,7"
 #import matplotlib.pyplot as plt
 
+def checkIOU(label_BBox, pred_BBox):
+  xmin_union = mp.max
 
 def checkIntersection(x, y, BBox):
   ###############################
@@ -35,32 +37,32 @@ def checkIntersection(x, y, BBox):
   target_x = cell_xmin
   target_y = cell_ymin
   if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 1
+    return 5
 
   target_x = cell_xmax
   target_y = cell_ymin
   if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 1
+    return 5
 
   target_x = cell_xmin
   target_y = cell_ymax
   if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 1
+    return 5
 
   target_x = cell_xmax
   target_y = cell_ymax
   if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 1
+    return 5
  
  
   #########################################
   #     BBox is within in a grid cell     #
   #########################################
   if xmin >= cell_xmin and ymin >= cell_ymin and xmax <= cell_xmax and ymax <= cell_ymax:
-    return 1
+    return 5
 
 
-  return 0
+  return 1
 
 def expandLabel(Y_, BBox_, batch_size):
   #print "Y_ shape: ",  Y_.shape
@@ -115,7 +117,7 @@ if __name__ == '__main__':
   NUM_NEURON_1 = 2048
   NUM_NEURON_2 = 2048
 
-  DROPOUT_PROB = 0.50
+  DROPOUT_PROB = 1.00
 
   LEARNING_RATE = 1e-3
  
@@ -128,6 +130,7 @@ if __name__ == '__main__':
   X      = tf.placeholder(tf.float32, shape=[None, 360,640,3])
   Y_     = tf.placeholder(tf.float32, shape=[None,K])
   Y_GRID = tf.placeholder(tf.float32, shape=[None,K*G])
+  Y_BBOX = tf.placeholder(tf.float32, shape=[None,P])
 
 
   W1  = tf.get_variable("W1", shape=[6,10,3,NUM_FILTER_1], initializer=tf.contrib.layers.xavier_initializer())
@@ -161,6 +164,11 @@ if __name__ == '__main__':
       matrix_w[i*G+j][i] = 1
 
   label_pred_transform_W = tf.constant(matrix_w, shape=matrix_w.shape, dtype=tf.float32)
+
+
+  W_bbox = tf.get_variable("W_bbox", shape=[K*G,P], initializer=tf.contrib.layers.xavier_initializer())
+  b_bbox = tf.Variable(tf.constant(0.1, shape=[P], dtype=tf.float32), trainable=True, name='b_bbox')
+
   #===== architecture =====#
   conv1 = tf.nn.relu(tf.nn.conv2d(X,     W1, strides=[1,2,3,1], padding='VALID')+b1)
   conv2 = tf.nn.relu(tf.nn.conv2d(conv1, W2, strides=[1,1,1,1], padding='SAME')+b2)
@@ -200,11 +208,18 @@ if __name__ == '__main__':
 
   Y = tf.matmul(fc2_drop,W11)+b11
   Y_class = tf.matmul(Y,label_pred_transform_W)
+  Y_soft = tf.nn.softmax(Y_class)
 
+  Y_bbox = tf.matmul(tf.nn.relu(Y),W_bbox)+b_bbox
+
+  total_preds  = tf.concat([Y_soft,Y_bbox],-1)
+  total_labels = tf.concat([Y_,Y_BBOX],-1)
 
   #mse_loss = tf.losses.mean_squared_error(labels=Y_GRID, predictions=Y, weights=1e-1)
-  mse_loss = tf.losses.mean_squared_error(labels=Y_GRID, predictions=Y, weights=1e-1*Y_GRID)
+  #mse_loss = tf.losses.mean_squared_error(labels=Y_GRID, predictions=Y, weights=1e-1*Y_GRID)
   #cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y))
+  #mse_loss = tf.losses.mean_squared_error(labels=Y_, predictions=Y_soft)
+  mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds)
 
   global_step = tf.Variable(0, trainable=False)
   lr = tf.train.exponential_decay(LEARNING_RATE, global_step,
@@ -215,8 +230,8 @@ if __name__ == '__main__':
   #train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy, global_step=global_step)
 
 
-  #correct_prediction = tf.equal(tf.argmax(Y, 1), tf.argmax(Y_, 1))
-  correct_prediction = tf.equal(tf.argmax(Y_class, 1), tf.argmax(Y_, 1))
+  correct_prediction = tf.equal(tf.argmax(Y_soft, 1), tf.argmax(Y_, 1))
+  #correct_prediction = tf.equal(tf.argmax(Y_class, 1), tf.argmax(Y_, 1))
   correct_sum = tf.reduce_sum(tf.cast(correct_prediction, tf.float32))
   accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
@@ -364,31 +379,43 @@ if __name__ == '__main__':
       x, y, box_coord = sess.run([train_images, train_labels, tr_box_coors])
       Y_labels_with_grid = expandLabel(y, box_coord, mini_batch)
 
+      box_coord[:,0] = box_coord[:,0]/640
+      box_coord[:,1] = box_coord[:,1]/640
+      box_coord[:,2] = box_coord[:,2]/360
+      box_coord[:,3] = box_coord[:,3]/360
+
+      #print "box_coord: ", box_coord
+ 
       #print "Y_labels_with_grid: ", Y_labels_with_grid
 
       #for i in range(0, mini_batch):
       #  io.imsave("%s_%d.%s" % ("test_img", i, 'jpeg'), x[i])
       
       #train_step.run(feed_dict={X: x, Y_: lump_y, keep_prob: DROPOUT_PROB})
-      train_step.run(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: DROPOUT_PROB})
+      train_step.run(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: DROPOUT_PROB})
       #elapsed_time = time.time() - start_time
       #print "Time for training: %f" % elapsed_time
       if itr % 20 == 0:
         print "Iter %d:  learning rate: %f  dropout: %.1f cross entropy: %f  accuracy: %f" % (itr,
                                                                 #LEARNING_RATE,
-                                                                lr.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0}),
+                                                                lr.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
                                                                 DROPOUT_PROB,
-                                                                mse_loss.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0}),
+                                                                mse_loss.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
                                                                 #cross_entropy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0}),
-                                                                accuracy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0}))
+                                                                accuracy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}))
 
       if itr % 1000 == 0 and itr != 0:
         valid_accuracy = 0.0
         for i in range(0,200):
           test_x, test_y, box_coord = sess.run([valid_images, valid_labels, vl_box_coors])
           Y_labels_with_grid = expandLabel(test_y, box_coord, 100)
-          
-          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0})
+          box_coord[0] = box_coord[0]/640
+          box_coord[1] = box_coord[1]/640
+          box_coord[2] = box_coord[2]/360
+          box_coord[3] = box_coord[3]/360
+
+   
+          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
         print "Validation Accuracy: %f (%.1f/20000)" %  (valid_accuracy/20000, valid_accuracy)
         #valid_result.write("Validation Accuracy: %f" % (valid_accuracy/20000))
         #valid_result.write("\n")
