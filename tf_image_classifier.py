@@ -12,10 +12,127 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"]="6,7"
 #import matplotlib.pyplot as plt
 
-def checkIOU(label_BBox, pred_BBox):
-  xmin_union = mp.max
+def limitWithinOne(val):
+  if val > 1:
+    return 1
 
-def checkIntersection(x, y, BBox):
+  if val < 0:
+    return 0
+
+  return val
+
+def checkIOU(label_BBox, pred_BBox):
+  #print "label_BBox shape: ", label_BBox.shape
+  #print "pred_BBox shape: ", pred_BBox.shape
+
+  IOU = np.zeros(label_BBox.shape[0])
+
+  for i in range(label_BBox.shape[0]):
+    ###############################
+    #  check validity of pred box #
+    ###############################
+    if pred_BBox[i][0] >= pred_BBox[i][1] or pred_BBox[i][2] >= pred_BBox[i][3]:
+      IOU[i] = 0
+    else:
+      if checkIntersection(label_BBox[i], pred_BBox[i]) == 1:
+
+        xmin_A = limitWithinOne(pred_BBox[i][0])
+        xmax_A = limitWithinOne(pred_BBox[i][1])
+        ymin_A = limitWithinOne(pred_BBox[i][2])
+        ymax_A = limitWithinOne(pred_BBox[i][3])
+
+        xmin_B = label_BBox[i][0]
+        xmax_B = label_BBox[i][1]
+        ymin_B = label_BBox[i][2]
+        ymax_B = label_BBox[i][3]
+
+        #print "pred BBox[0]: ", xmin_A
+        #print "pred BBox[1]: ", xmax_A
+        #print "pred BBox[2]: ", ymin_A
+        #print "pred BBox[3]: ", ymax_A
+        #print "width A: ", (xmax_A-xmin_A)
+        #print "height A: ", (ymax_A-ymin_A)
+
+        #print "label BBox[0]: ", xmin_B
+        #print "label BBox[1]: ", xmax_B
+        #print "label BBox[2]: ", ymin_B
+        #print "label BBox[3]: ", ymax_B
+        #print "width B: ", (xmax_B-xmin_B)
+        #print "height B: ", (ymax_B-ymin_B)
+
+
+        xmin_intersection = np.maximum(xmin_A, xmin_B)
+        xmax_intersection = np.minimum(xmax_A, xmax_B)
+        ymin_intersection = np.maximum(ymin_A, ymin_B)
+        ymax_intersection = np.minimum(ymax_A, ymax_B)
+
+        intersection_area = (xmax_intersection-xmin_intersection)*(ymax_intersection-ymin_intersection)
+        area_two_boxes = (xmax_A-xmin_A)*(ymax_A-ymin_A) + (xmax_B-xmin_B)*(ymax_B-ymin_B)
+        IOU[i] = intersection_area/(area_two_boxes-intersection_area) 
+
+        #print "intersection_area: ", intersection_area
+        #print "area_two_boxes: ", area_two_boxes
+        #print "IOU[%d]: %f" % (i, IOU[i])
+      else:
+        IOU[i] = 0
+      
+
+  #print "xmin_union: ", xmin_union
+  #print "ymin_union: ", ymin_union
+  #print "xmax_union: ", xmax_union
+  #print "ymax_union: ", ymax_union
+
+
+    
+  #print IOU
+  return IOU
+
+def checkIntersection(BBoxA, BBoxB):
+  ###############################
+  #       shape[0]: height      #
+  #       shape[1]: width       #
+  ###############################
+
+  xmin = BBoxB[0] 
+  xmax = BBoxB[1]
+  ymin = BBoxB[2]
+  ymax = BBoxB[3]
+
+
+  #########################################
+  #     BBox intersects the grid cells    #
+  #########################################
+  target_x = BBoxA[0] #xmin
+  target_y = BBoxA[2] #ymin
+  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
+    return 1
+
+  target_x = BBoxA[0] #xmin
+  target_y = BBoxA[3] #ymax
+  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
+    return 1
+
+  target_x = BBoxA[1] #xmax
+  target_y = BBoxA[3] #ymax
+  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
+    return 1
+
+  target_x = BBoxA[1] #xmax
+  target_y = BBoxA[2] #ymin
+  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
+    return 1
+ 
+ 
+  #########################################
+  #       BBoxB is within in BBoxA        #
+  #########################################
+  if xmin >= BBoxA[0] and ymin >= BBoxA[2] and xmax <= BBoxA[1] and ymax <= BBoxA[3]:
+    return 1
+
+
+  return 0
+
+def checkIntersectionGrid(x, y, BBox):
   ###############################
   #       shape[0]: height      #
   #       shape[1]: width       #
@@ -37,38 +154,38 @@ def checkIntersection(x, y, BBox):
   target_x = cell_xmin
   target_y = cell_ymin
   if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 5
+    return 1
 
   target_x = cell_xmax
   target_y = cell_ymin
   if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 5
+    return 1
 
   target_x = cell_xmin
   target_y = cell_ymax
   if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 5
+    return 1
 
   target_x = cell_xmax
   target_y = cell_ymax
   if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 5
+    return 1
  
  
   #########################################
   #     BBox is within in a grid cell     #
   #########################################
   if xmin >= cell_xmin and ymin >= cell_ymin and xmax <= cell_xmax and ymax <= cell_ymax:
-    return 5
+    return 1
 
 
-  return 1
+  return 0
 
 def expandLabel(Y_, BBox_, batch_size):
   #print "Y_ shape: ",  Y_.shape
   #print "BBox_ shape: ",  BBox_.shape
-  Y_labels_with_grids = np.zeros((batch_size, K*G))
-  target_classes = np.argmax(Y_, axis=1)
+  Y_labels_with_grids = np.zeros((batch_size, G))
+  #target_classes = np.argmax(Y_, axis=1)
 
   #print "target_classes shape: ",  target_classes.shape
   #print "Y_labels_with_grids shape: ",  Y_labels_with_grids.shape
@@ -80,7 +197,7 @@ def expandLabel(Y_, BBox_, batch_size):
         #print "i: ", i
         #print "j: ", j
         #print target_classes
-        Y_labels_with_grids[idx][target_classes[idx]*48+i*6+j] = checkIntersection(i,j, BBox_[idx])
+        Y_labels_with_grids[idx][i*6+j] = checkIntersectionGrid(i,j, BBox_[idx])
    
 
   return Y_labels_with_grids
@@ -117,7 +234,7 @@ if __name__ == '__main__':
   NUM_NEURON_1 = 2048
   NUM_NEURON_2 = 2048
 
-  DROPOUT_PROB = 1.00
+  DROPOUT_PROB = 1.0
 
   LEARNING_RATE = 1e-3
  
@@ -129,7 +246,7 @@ if __name__ == '__main__':
   # initialize parameters randomly
   X      = tf.placeholder(tf.float32, shape=[None, 360,640,3])
   Y_     = tf.placeholder(tf.float32, shape=[None,K])
-  Y_GRID = tf.placeholder(tf.float32, shape=[None,K*G])
+  Y_GRID = tf.placeholder(tf.float32, shape=[None,G])
   Y_BBOX = tf.placeholder(tf.float32, shape=[None,P])
 
 
@@ -140,7 +257,7 @@ if __name__ == '__main__':
   W5  = tf.get_variable("W5", shape=[3,3,NUM_FILTER_4,NUM_FILTER_5], initializer=tf.contrib.layers.xavier_initializer())
   W6  = tf.get_variable("W6", shape=[3,3,NUM_FILTER_5,NUM_FILTER_6], initializer=tf.contrib.layers.xavier_initializer())
 
-  W9  = tf.get_variable("W9", shape=[12*14*NUM_FILTER_6,NUM_NEURON_1], initializer=tf.contrib.layers.xavier_initializer())
+  W9  = tf.get_variable("W9", shape=[23*27*NUM_FILTER_6,NUM_NEURON_1], initializer=tf.contrib.layers.xavier_initializer())
   W10 = tf.get_variable("W10", shape=[NUM_NEURON_1,NUM_NEURON_2], initializer=tf.contrib.layers.xavier_initializer())
   #W11 = tf.get_variable("W11", shape=[NUM_NEURON_2,K], initializer=tf.contrib.layers.xavier_initializer())
   W11 = tf.get_variable("W11", shape=[NUM_NEURON_2,K*G], initializer=tf.contrib.layers.xavier_initializer())
@@ -180,9 +297,9 @@ if __name__ == '__main__':
   pool2 = tf.nn.max_pool(conv4, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
 
   conv5 = tf.nn.relu(tf.nn.conv2d(pool2, W5, strides=[1,1,1,1], padding='SAME')+b5)
-  pool3 = tf.nn.max_pool(conv5, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
-  conv6 = tf.nn.relu(tf.nn.conv2d(pool3, W6, strides=[1,1,1,1], padding='SAME')+b6)
-  pool4 = tf.nn.max_pool(conv6, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+  conv6 = tf.nn.relu(tf.nn.conv2d(conv5, W6, strides=[1,1,1,1], padding='SAME')+b6)
+  pool3 = tf.nn.max_pool(conv6, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+
 
 
   print "conv1: ", conv1.get_shape()
@@ -194,11 +311,10 @@ if __name__ == '__main__':
   print "pool2: ", pool2.get_shape()
 
   print "conv5: ", conv5.get_shape()
-  print "pool3: ", pool3.get_shape()
   print "conv6: ", conv6.get_shape()
-  print "pool4: ", pool4.get_shape()
+  print "pool3: ", pool3.get_shape()
 
-  YY = tf.reshape(pool4, shape=[-1,12*14*NUM_FILTER_6])
+  YY = tf.reshape(pool3, shape=[-1,23*27*NUM_FILTER_6])
 
   fc1 = tf.nn.relu(tf.matmul(YY,W9)+b9)
   fc1_drop = tf.nn.dropout(fc1, keep_prob)
@@ -219,7 +335,13 @@ if __name__ == '__main__':
   #mse_loss = tf.losses.mean_squared_error(labels=Y_GRID, predictions=Y, weights=1e-1*Y_GRID)
   #cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y))
   #mse_loss = tf.losses.mean_squared_error(labels=Y_, predictions=Y_soft)
-  mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds)
+
+  mse_weight = np.full(K+P,0.1)
+  for i in range(K, K+P):
+    mse_weight = 1
+
+  mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds, weights=mse_weight)
+  #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds)
 
   global_step = tf.Variable(0, trainable=False)
   lr = tf.train.exponential_decay(LEARNING_RATE, global_step,
@@ -235,6 +357,8 @@ if __name__ == '__main__':
   correct_sum = tf.reduce_sum(tf.cast(correct_prediction, tf.float32))
   accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
+  # Add ops to save and restore all the variables.
+  saver = tf.train.Saver()
 
   #train_data_path = []
   #for name in label_dict.keys():
@@ -352,8 +476,8 @@ if __name__ == '__main__':
     sess.run(tf.local_variables_initializer())
 
     # Restore variables from disk.
-    #saver.restore(sess, "./checkpoint/model_200000.ckpt")
-    #print("Model restored.")
+    #saver.restore(sess, "./checkpoint/model_20000.ckpt")
+    #print "Model %s restored." % ("model_50000")
 
 
     # Create a coordinator and run all QueueRunner objects
@@ -367,7 +491,7 @@ if __name__ == '__main__':
     image_iterator = 0
     data = []
     label = []
-    for itr in xrange(10000):
+    for itr in xrange(100000):
       #x, y = batchRead(image_name, class_dict, mean_img, pool)
 
       #print y
@@ -384,7 +508,10 @@ if __name__ == '__main__':
       box_coord[:,2] = box_coord[:,2]/360
       box_coord[:,3] = box_coord[:,3]/360
 
-      #print "box_coord: ", box_coord
+      #print "box_coord[0]: ", box_coord[:,0]
+      #print "box_coord[1]: ", box_coord[:,1]
+      #print "box_coord[2]: ", box_coord[:,2]
+      #print "box_coord[3]: ", box_coord[:,3]
  
       #print "Y_labels_with_grid: ", Y_labels_with_grid
 
@@ -396,27 +523,38 @@ if __name__ == '__main__':
       #elapsed_time = time.time() - start_time
       #print "Time for training: %f" % elapsed_time
       if itr % 20 == 0:
-        print "Iter %d:  learning rate: %f  dropout: %.1f cross entropy: %f  accuracy: %f" % (itr,
+        pred_bbox = Y_bbox.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
+        #print "pred_bbox: ", pred_bbox
+        #tt = np.mean(checkIOU(box_coord, pred_bbox))
+        #print tt
+        #print tt.shape
+        print "Iter %d:  learning rate: %f  dropout: %.1f cross entropy: %f  accuracy: %f  mean IOU: %f" % (itr,
                                                                 #LEARNING_RATE,
                                                                 lr.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
                                                                 DROPOUT_PROB,
                                                                 mse_loss.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
                                                                 #cross_entropy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0}),
-                                                                accuracy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}))
+                                                                accuracy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
+                                                                np.mean(checkIOU(box_coord, pred_bbox)))
 
       if itr % 1000 == 0 and itr != 0:
         valid_accuracy = 0.0
+        valid_IOU = 0.0
         for i in range(0,200):
           test_x, test_y, box_coord = sess.run([valid_images, valid_labels, vl_box_coors])
           Y_labels_with_grid = expandLabel(test_y, box_coord, 100)
-          box_coord[0] = box_coord[0]/640
-          box_coord[1] = box_coord[1]/640
-          box_coord[2] = box_coord[2]/360
-          box_coord[3] = box_coord[3]/360
+          box_coord[:,0] = box_coord[:,0]/640
+          box_coord[:,1] = box_coord[:,1]/640
+          box_coord[:,2] = box_coord[:,2]/360
+          box_coord[:,3] = box_coord[:,3]/360
+
+          pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
 
    
           valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
+          valid_IOU += np.mean(checkIOU(box_coord, pred_bbox))
         print "Validation Accuracy: %f (%.1f/20000)" %  (valid_accuracy/20000, valid_accuracy)
+        print "Validation Mean IOU: %f (%.1f/200)" %  (valid_IOU/200, valid_IOU)
         #valid_result.write("Validation Accuracy: %f" % (valid_accuracy/20000))
         #valid_result.write("\n")
 
