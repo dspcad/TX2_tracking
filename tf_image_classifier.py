@@ -9,7 +9,7 @@ from PIL import Image
 from skimage import io
 from skimage import transform
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="6,7"
+os.environ["CUDA_VISIBLE_DEVICES"]="0,3"
 #import matplotlib.pyplot as plt
 
 def limitWithinOne(val):
@@ -20,6 +20,25 @@ def limitWithinOne(val):
     return 0
 
   return val
+
+def clipWidth(val):
+  if val > 640:
+    return 640
+
+  if val < 0:
+    return 0
+
+  return val
+
+def clipHeight(val):
+  if val > 360:
+    return 360
+
+  if val < 0:
+    return 0
+
+  return val
+
 
 def checkIOU(label_BBox, pred_BBox):
   #print "label_BBox shape: ", label_BBox.shape
@@ -36,10 +55,16 @@ def checkIOU(label_BBox, pred_BBox):
     else:
       if checkIntersection(label_BBox[i], pred_BBox[i]) == 1:
 
-        xmin_A = limitWithinOne(pred_BBox[i][0])
-        xmax_A = limitWithinOne(pred_BBox[i][1])
-        ymin_A = limitWithinOne(pred_BBox[i][2])
-        ymax_A = limitWithinOne(pred_BBox[i][3])
+        #xmin_A = limitWithinOne(pred_BBox[i][0])
+        #xmax_A = limitWithinOne(pred_BBox[i][1])
+        #ymin_A = limitWithinOne(pred_BBox[i][2])
+        #ymax_A = limitWithinOne(pred_BBox[i][3])
+
+        xmin_A = clipWidth(pred_BBox[i][0])
+        xmax_A = clipWidth(pred_BBox[i][1])
+        ymin_A = clipHeight(pred_BBox[i][2])
+        ymax_A = clipHeight(pred_BBox[i][3])
+
 
         xmin_B = label_BBox[i][0]
         xmax_B = label_BBox[i][1]
@@ -324,35 +349,38 @@ if __name__ == '__main__':
 
   Y = tf.matmul(fc2_drop,W11)+b11
   Y_class = tf.matmul(Y,label_pred_transform_W)
-  Y_soft = tf.nn.softmax(Y_class)
+  #Y_soft = tf.nn.softmax(Y_class)
 
   Y_bbox = tf.matmul(tf.nn.relu(Y),W_bbox)+b_bbox
 
-  total_preds  = tf.concat([Y_soft,Y_bbox],-1)
-  total_labels = tf.concat([Y_,Y_BBOX],-1)
+  #total_preds  = tf.concat([Y_soft,Y_bbox],-1)
+  #total_labels = tf.concat([Y_,Y_BBOX],-1)
 
   #mse_loss = tf.losses.mean_squared_error(labels=Y_GRID, predictions=Y, weights=1e-1)
   #mse_loss = tf.losses.mean_squared_error(labels=Y_GRID, predictions=Y, weights=1e-1*Y_GRID)
   #cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y))
   #mse_loss = tf.losses.mean_squared_error(labels=Y_, predictions=Y_soft)
 
-  mse_weight = np.full(K+P,0.1)
+  mse_weight = np.full(K+P,0.5)
   for i in range(K, K+P):
-    mse_weight = 1
+    mse_weight = 0.005
 
-  mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds, weights=mse_weight)
+  #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds, weights=mse_weight)
+  mse_loss = tf.losses.mean_squared_error(labels=Y_BBOX, predictions=Y_bbox)
+  cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y_class))
+  total_loss = 1e-4*mse_loss+1e-3*cross_entropy
   #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds)
 
   global_step = tf.Variable(0, trainable=False)
   lr = tf.train.exponential_decay(LEARNING_RATE, global_step,
                                   100000, 0.1, staircase=True)
   #train_step = tf.train.MomentumOptimizer(LEARNING_RATE, 0.9, use_nesterov=True).minimize(total_loss)
-  train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(mse_loss, global_step=global_step)
+  train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(total_loss, global_step=global_step)
   #train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(cross_entropy, global_step=global_step)
   #train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy, global_step=global_step)
 
 
-  correct_prediction = tf.equal(tf.argmax(Y_soft, 1), tf.argmax(Y_, 1))
+  correct_prediction = tf.equal(tf.argmax(Y_class, 1), tf.argmax(Y_, 1))
   #correct_prediction = tf.equal(tf.argmax(Y_class, 1), tf.argmax(Y_, 1))
   correct_sum = tf.reduce_sum(tf.cast(correct_prediction, tf.float32))
   accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
@@ -503,10 +531,10 @@ if __name__ == '__main__':
       x, y, box_coord = sess.run([train_images, train_labels, tr_box_coors])
       Y_labels_with_grid = expandLabel(y, box_coord, mini_batch)
 
-      box_coord[:,0] = box_coord[:,0]/640
-      box_coord[:,1] = box_coord[:,1]/640
-      box_coord[:,2] = box_coord[:,2]/360
-      box_coord[:,3] = box_coord[:,3]/360
+      box_coord[:,0] = box_coord[:,0]
+      box_coord[:,1] = box_coord[:,1]
+      box_coord[:,2] = box_coord[:,2]
+      box_coord[:,3] = box_coord[:,3]
 
       #print "box_coord[0]: ", box_coord[:,0]
       #print "box_coord[1]: ", box_coord[:,1]
@@ -532,7 +560,7 @@ if __name__ == '__main__':
                                                                 #LEARNING_RATE,
                                                                 lr.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
                                                                 DROPOUT_PROB,
-                                                                mse_loss.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
+                                                                total_loss.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
                                                                 #cross_entropy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0}),
                                                                 accuracy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
                                                                 np.mean(checkIOU(box_coord, pred_bbox)))
@@ -543,10 +571,10 @@ if __name__ == '__main__':
         for i in range(0,200):
           test_x, test_y, box_coord = sess.run([valid_images, valid_labels, vl_box_coors])
           Y_labels_with_grid = expandLabel(test_y, box_coord, 100)
-          box_coord[:,0] = box_coord[:,0]/640
-          box_coord[:,1] = box_coord[:,1]/640
-          box_coord[:,2] = box_coord[:,2]/360
-          box_coord[:,3] = box_coord[:,3]/360
+          box_coord[:,0] = box_coord[:,0]
+          box_coord[:,1] = box_coord[:,1]
+          box_coord[:,2] = box_coord[:,2]
+          box_coord[:,3] = box_coord[:,3]
 
           pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
 
