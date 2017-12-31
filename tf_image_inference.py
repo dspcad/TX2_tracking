@@ -8,9 +8,73 @@ import time
 from PIL import Image
 from skimage import io
 from skimage import transform
+import time
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="6,7"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 #import matplotlib.pyplot as plt
+
+from scipy.misc import imsave
+
+def drawBBox(img, pred_coordinates, ground_truth_coordinates):
+  xmin = int(pred_coordinates[0])
+  xmax = int(pred_coordinates[1])
+  ymin = int(pred_coordinates[2])
+  ymax = int(pred_coordinates[3])
+
+  #print "image shape: ", img.shape
+  #print "coordinate: ", coordinates
+
+  for i in range(0,xmax-xmin):
+    img[ymin][xmin+i][0] = 255
+    img[ymin][xmin+i][1] = 0
+    img[ymin][xmin+i][2] = 0
+
+  for i in range(0,ymax-ymin):
+    img[ymin+i][xmin][0] = 255
+    img[ymin+i][xmin][1] = 0
+    img[ymin+i][xmin][2] = 0
+
+  for i in range(0,ymax-ymin):
+    img[ymin+i][xmax][0] = 255
+    img[ymin+i][xmax][1] = 0
+    img[ymin+i][xmax][2] = 0
+
+  for i in range(0,xmax-xmin):
+    img[ymax][xmin+i][0] = 255
+    img[ymax][xmin+i][1] = 0
+    img[ymax][xmin+i][2] = 0
+
+  xmin = int(ground_truth_coordinates[0])
+  xmax = int(ground_truth_coordinates[1])
+  ymin = int(ground_truth_coordinates[2])
+  ymax = int(ground_truth_coordinates[3])
+
+  #print "image shape: ", img.shape
+  #print "coordinate: ", coordinates
+
+  for i in range(0,xmax-xmin):
+    img[ymin][xmin+i][0] = 0
+    img[ymin][xmin+i][1] = 128
+    img[ymin][xmin+i][2] = 0
+
+  for i in range(0,ymax-ymin):
+    img[ymin+i][xmin][0] = 0
+    img[ymin+i][xmin][1] = 128
+    img[ymin+i][xmin][2] = 0
+
+  for i in range(0,ymax-ymin):
+    img[ymin+i][xmax][0] = 0
+    img[ymin+i][xmax][1] = 128
+    img[ymin+i][xmax][2] = 0
+
+  for i in range(0,xmax-xmin):
+    img[ymax][xmin+i][0] = 0
+    img[ymax][xmin+i][1] = 128
+    img[ymax][xmin+i][2] = 0
+
+
+  return img
+
 
 def limitWithinOne(val):
   if val > 1:
@@ -234,11 +298,11 @@ if __name__ == '__main__':
 
   lines = map(lambda s: s.strip(), lines)
   label_dict = {}
+  look_up_label_dict = {}
   for l in lines:
     elements = l.split()
     label_dict[elements[0]] = elements[1]
-
-
+    look_up_label_dict[int(elements[1])] = elements[0]
 
 
   #########################################
@@ -361,23 +425,23 @@ if __name__ == '__main__':
   #cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y))
   #mse_loss = tf.losses.mean_squared_error(labels=Y_, predictions=Y_soft)
 
-  mse_weight = np.full(K+P,0.5)
-  for i in range(K, K+P):
-    mse_weight = 0.005
-
-  #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds, weights=mse_weight)
-  mse_loss = tf.losses.mean_squared_error(labels=Y_BBOX, predictions=Y_bbox)
-  cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y_class))
-  total_loss = 1e-4*mse_loss+1e-3*cross_entropy
-  #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds)
-
-  global_step = tf.Variable(0, trainable=False)
-  lr = tf.train.exponential_decay(LEARNING_RATE, global_step,
-                                  100000, 0.1, staircase=True)
-  #train_step = tf.train.MomentumOptimizer(LEARNING_RATE, 0.9, use_nesterov=True).minimize(total_loss)
-  train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(total_loss, global_step=global_step)
-  #train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(cross_entropy, global_step=global_step)
-  #train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy, global_step=global_step)
+#  mse_weight = np.full(K+P,0.5)
+#  for i in range(K, K+P):
+#    mse_weight = 0.005
+#
+#  #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds, weights=mse_weight)
+#  mse_loss = tf.losses.mean_squared_error(labels=Y_BBOX, predictions=Y_bbox)
+#  cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y_class))
+#  total_loss = 1e-4*mse_loss+1e-3*cross_entropy
+#  #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds)
+#
+#  global_step = tf.Variable(0, trainable=False)
+#  lr = tf.train.exponential_decay(LEARNING_RATE, global_step,
+#                                  100000, 0.1, staircase=True)
+#  #train_step = tf.train.MomentumOptimizer(LEARNING_RATE, 0.9, use_nesterov=True).minimize(total_loss)
+#  train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(total_loss, global_step=global_step)
+#  #train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(cross_entropy, global_step=global_step)
+#  #train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy, global_step=global_step)
 
 
   correct_prediction = tf.equal(tf.argmax(Y_class, 1), tf.argmax(Y_, 1))
@@ -398,59 +462,10 @@ if __name__ == '__main__':
   #for i in range(1,8):
   #  train_data_path.append("/home/hhwu/tracking/crop_data/train_boat%d.tfrecords" % i)
   #train_data_path = "/home/hhwu/tracking/tf_data/train/train_person3.tfrecords"
-  train_data_path = "/home/hhwu/tracking/data_training/train_all.tfrecords"
   valid_data_path = "/home/hhwu/tracking/data_training/valid_all.tfrecords"
   #train_data_path = "/home/hhwu/tracking/crop_data/train_boat8.tfrecords"
 
   with tf.Session() as sess:
-    ################################
-    #        Training Data         #
-    ################################
-    train_feature = {'train/image': tf.FixedLenFeature([], tf.string),
-                     'train/xmin' : tf.FixedLenFeature([], tf.int64),
-                     'train/xmax' : tf.FixedLenFeature([], tf.int64),
-                     'train/ymin' : tf.FixedLenFeature([], tf.int64),
-                     'train/ymax' : tf.FixedLenFeature([], tf.int64),
-                     'train/label': tf.FixedLenFeature([], tf.int64)}
-    # Create a list of filenames and pass it to a queue
-    #train_filename_queue = tf.train.string_input_producer(train_data_path, shuffle=True)
-    train_filename_queue = tf.train.string_input_producer([train_data_path])
-    #filename_queue = tf.train.string_input_producer([data_path], num_epochs=1)
-    # Define a reader and read the next record
-    train_reader = tf.TFRecordReader()
-    _, train_serialized_example = train_reader.read(train_filename_queue)
-
-        # Decode the record read by the reader
-    train_features = tf.parse_single_example(train_serialized_example, features=train_feature)
-    # Convert the image data from string back to the numbers
-    #train_image = tf.decode_raw(train_features['train/image'], tf.uint8)
-    train_image = tf.cast(tf.decode_raw(train_features['train/image'], tf.uint8), tf.float32)
-    
-    # Cast label data into int32
-    train_label_idx = tf.cast(train_features['train/label'], tf.int32)
-    train_label = tf.one_hot(train_label_idx, K)
-
-    train_label_xmin = tf.cast(train_features['train/xmin'], tf.float32)
-    train_label_xmax = tf.cast(train_features['train/xmax'], tf.float32)
-    train_label_ymin = tf.cast(train_features['train/ymin'], tf.float32)
-    train_label_ymax = tf.cast(train_features['train/ymax'], tf.float32)
-
-
-
-    # Reshape image data into the original shape
-    train_image = tf.reshape(train_image, [360, 640, 3])
-
-    #train_image = tf.image.resize_images(train_image, [640, 640])
-
-    train_label_box_coor = tf.stack([train_label_xmin, train_label_xmax, train_label_ymin, train_label_ymax])
-
-    #print "TFRecord: hhwu !"
-    train_images, train_labels, tr_box_coors = tf.train.batch([train_image, train_label, train_label_box_coor], 
-                                                 batch_size=mini_batch, capacity=20*mini_batch, num_threads=16)
-    #train_images, train_labels = tf.train.batch([train_image, train_label], 
-    #                                             batch_size=mini_batch, capacity=20*mini_batch, num_threads=16)
-
-
     ################################
     #       Validation Data        #
     ################################
@@ -504,8 +519,8 @@ if __name__ == '__main__':
     sess.run(tf.local_variables_initializer())
 
     # Restore variables from disk.
-    #saver.restore(sess, "./checkpoint/model_90000.ckpt")
-    #print "Model %s restored." % ("model_90000")
+    saver.restore(sess, "./checkpoint/model_trained_90000.ckpt")
+    print "Model %s restored." % ("model_trained_90000")
 
 
     # Create a coordinator and run all QueueRunner objects
@@ -516,91 +531,35 @@ if __name__ == '__main__':
 
 
 
-    image_iterator = 0
-    data = []
-    label = []
-    for itr in xrange(100000):
-      #x, y = batchRead(image_name, class_dict, mean_img, pool)
+    print "Inference Starts..."
+    valid_accuracy = 0.0
+    valid_IOU = 0.0
+    time_start=time.time()
+    for i in range(0,200):
+      test_x, test_y, box_coord = sess.run([valid_images, valid_labels, vl_box_coors])
+      Y_labels_with_grid = expandLabel(test_y, box_coord, 100)
 
-      #print y
-      #asyn_0, asyn_1, asyn_2, asyn_3, asyn_4, asyn_5, asyn_6, asyn_7, asyn_train_y = setAsynBatchRead(class_name, pool, mean_img)
-      #start_time = time.time()
-
-      #x, y, image_iterator, data, label = batchSerialRead(image_iterator, data, label)
-      #x, y = sess.run([train_image, train_label])
-      x, y, box_coord = sess.run([train_images, train_labels, tr_box_coors])
-      Y_labels_with_grid = expandLabel(y, box_coord, mini_batch)
-
-      box_coord[:,0] = box_coord[:,0]
-      box_coord[:,1] = box_coord[:,1]
-      box_coord[:,2] = box_coord[:,2]
-      box_coord[:,3] = box_coord[:,3]
-
-      #print "box_coord[0]: ", box_coord[:,0]
-      #print "box_coord[1]: ", box_coord[:,1]
-      #print "box_coord[2]: ", box_coord[:,2]
-      #print "box_coord[3]: ", box_coord[:,3]
- 
-      #print "Y_labels_with_grid: ", Y_labels_with_grid
-
-      #for i in range(0, mini_batch):
-      #  io.imsave("%s_%d.%s" % ("test_img", i, 'jpeg'), x[i])
-      
-      #train_step.run(feed_dict={X: x, Y_: lump_y, keep_prob: DROPOUT_PROB})
-      train_step.run(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: DROPOUT_PROB})
-      #elapsed_time = time.time() - start_time
-      #print "Time for training: %f" % elapsed_time
-      if itr % 20 == 0:
-        pred_bbox = Y_bbox.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
-        #print "pred_bbox: ", pred_bbox
-        #tt = np.mean(checkIOU(box_coord, pred_bbox))
-        #print tt
-        #print tt.shape
-        print "Iter %d:  learning rate: %f  dropout: %.1f cross entropy: %f  accuracy: %f  mean IOU: %f" % (itr,
-                                                                #LEARNING_RATE,
-                                                                lr.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
-                                                                DROPOUT_PROB,
-                                                                total_loss.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
-                                                                #cross_entropy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0}),
-                                                                accuracy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
-                                                                np.mean(checkIOU(box_coord, pred_bbox)))
-
-      if itr % 1000 == 0:
-        valid_accuracy = 0.0
-        valid_IOU = 0.0
-        for i in range(0,200):
-          test_x, test_y, box_coord = sess.run([valid_images, valid_labels, vl_box_coors])
-          Y_labels_with_grid = expandLabel(test_y, box_coord, 100)
-          box_coord[:,0] = box_coord[:,0]
-          box_coord[:,1] = box_coord[:,1]
-          box_coord[:,2] = box_coord[:,2]
-          box_coord[:,3] = box_coord[:,3]
-
-          pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
+      pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
 
    
-          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
-          valid_IOU += np.mean(checkIOU(box_coord, pred_bbox))
-        print "Validation Accuracy: %f (%.1f/20000)" %  (valid_accuracy/20000, valid_accuracy)
-        print "Validation Mean IOU: %f (%.1f/200)" %  (valid_IOU/200, valid_IOU)
-        #valid_result.write("Validation Accuracy: %f" % (valid_accuracy/20000))
-        #valid_result.write("\n")
+      valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
+      valid_IOU += np.mean(checkIOU(box_coord, pred_bbox))
 
-       
+      for j in range(0, 100):
+        bbox_image = drawBBox(test_x[j],pred_bbox[j], box_coord[j])
+        #print "Image: ", bbox_image
+        print np.argmax(test_y[j])
+        print look_up_label_dict[np.argmax(test_y[j])]
+        io.imsave("%s_%d_%s.%s" % ("./val_images/test_img", 100*i+j, look_up_label_dict[np.argmax(test_y[j])], 'jpg'), test_x[j]/256.0)
+        #imsave("%s_%d_%s.%s" % ("./val_images/test_img", 100*i+j, look_up_label_dict[np.argmax(test_y[j])], 'jpg'), test_x[j])
 
-      if itr % 10000 == 0 and itr != 0:
-        model_name = "./checkpoint/model_%d.ckpt" % itr
-        save_path = saver.save(sess, model_name)
-        #save_path = saver.save(sess, "./checkpoint/model.ckpt")
-        print("Model saved in file: %s" % save_path)
+    time_end = time.time()
+    resultRunTime = time_end-time_start
+    print "Spent time: ", resultRunTime  
+    print "FPS: ", 20000/resultRunTime  
+    print "Validation Accuracy: %f (%.1f/20000)" %  (valid_accuracy/20000, valid_accuracy)
+    print "Validation Mean IOU: %f (%.1f/200)" %  (valid_IOU/200, valid_IOU)
 
-
-
-
-    model_name = "./checkpoint/model_trained.ckpt"
-    save_path = saver.save(sess, model_name)
-    #save_path = saver.save(sess, "./checkpoint/model.ckpt")
-    print("Model saved in file: %s" % save_path)
 
 
     coord.request_stop()
