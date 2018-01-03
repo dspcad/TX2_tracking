@@ -13,13 +13,12 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 #import matplotlib.pyplot as plt
 
-from scipy.misc import imsave
 
 def drawBBox(img, pred_coordinates, ground_truth_coordinates):
-  xmin = int(pred_coordinates[0])
-  xmax = int(pred_coordinates[1])
-  ymin = int(pred_coordinates[2])
-  ymax = int(pred_coordinates[3])
+  xmin = int(clipWidth(pred_coordinates[0])) - 1
+  xmax = int(clipWidth(pred_coordinates[1])) - 1
+  ymin = int(clipHeight(pred_coordinates[2])) - 1
+  ymax = int(clipHeight(pred_coordinates[3])) - 1
 
   #print "image shape: ", img.shape
   #print "coordinate: ", coordinates
@@ -44,10 +43,10 @@ def drawBBox(img, pred_coordinates, ground_truth_coordinates):
     img[ymax][xmin+i][1] = 0
     img[ymax][xmin+i][2] = 0
 
-  xmin = int(ground_truth_coordinates[0])
-  xmax = int(ground_truth_coordinates[1])
-  ymin = int(ground_truth_coordinates[2])
-  ymax = int(ground_truth_coordinates[3])
+  xmin = int(ground_truth_coordinates[0]) - 1
+  xmax = int(ground_truth_coordinates[1]) - 1
+  ymin = int(ground_truth_coordinates[2]) - 1
+  ymax = int(ground_truth_coordinates[3]) - 1
 
   #print "image shape: ", img.shape
   #print "coordinate: ", coordinates
@@ -89,8 +88,8 @@ def clipWidth(val):
   if val > 640:
     return 640
 
-  if val < 0:
-    return 0
+  if val < 1:
+    return 1
 
   return val
 
@@ -98,8 +97,8 @@ def clipHeight(val):
   if val > 360:
     return 360
 
-  if val < 0:
-    return 0
+  if val < 1:
+    return 1
 
   return val
 
@@ -297,11 +296,9 @@ if __name__ == '__main__':
   lines = infile.readlines()
 
   lines = map(lambda s: s.strip(), lines)
-  label_dict = {}
   look_up_label_dict = {}
   for l in lines:
     elements = l.split()
-    label_dict[elements[0]] = elements[1]
     look_up_label_dict[int(elements[1])] = elements[0]
 
 
@@ -311,17 +308,17 @@ if __name__ == '__main__':
   mini_batch = 128
 
   K = 98 # number of classes
-  G = 48 # number of grid cells
+  G = 144 # number of grid cells
   P = 4  # four parameters of the bounding boxes
-  NUM_FILTER_1 = 64
-  NUM_FILTER_2 = 64
-  NUM_FILTER_3 = 128
-  NUM_FILTER_4 = 128
-  NUM_FILTER_5 = 256
-  NUM_FILTER_6 = 256
+  NUM_FILTER_1 = 32
+  NUM_FILTER_2 = 32
+  NUM_FILTER_3 = 64 
+  NUM_FILTER_4 = 64 
+  NUM_FILTER_5 = 128
+  NUM_FILTER_6 = 128
 
-  NUM_NEURON_1 = 2048
-  NUM_NEURON_2 = 2048
+  NUM_NEURON_1 = 1024
+  NUM_NEURON_2 = 1024
 
   DROPOUT_PROB = 1.0
 
@@ -329,13 +326,13 @@ if __name__ == '__main__':
  
 
   # Dropout probability
-  keep_prob     = tf.placeholder(tf.float32)
+  #keep_prob     = tf.placeholder(tf.float32)
 
 
   # initialize parameters randomly
   X      = tf.placeholder(tf.float32, shape=[None, 360,640,3])
   Y_     = tf.placeholder(tf.float32, shape=[None,K])
-  Y_GRID = tf.placeholder(tf.float32, shape=[None,G])
+  #Y_GRID = tf.placeholder(tf.float32, shape=[None,G])
   Y_BBOX = tf.placeholder(tf.float32, shape=[None,P])
 
 
@@ -406,12 +403,12 @@ if __name__ == '__main__':
   YY = tf.reshape(pool3, shape=[-1,23*27*NUM_FILTER_6])
 
   fc1 = tf.nn.relu(tf.matmul(YY,W9)+b9)
-  fc1_drop = tf.nn.dropout(fc1, keep_prob)
+  #fc1_drop = tf.nn.dropout(fc1, keep_prob)
 
-  fc2 = tf.nn.relu(tf.matmul(fc1_drop,W10)+b10)
-  fc2_drop = tf.nn.dropout(fc2, keep_prob)
+  fc2 = tf.nn.relu(tf.matmul(fc1,W10)+b10)
+  #fc2_drop = tf.nn.dropout(fc2, keep_prob)
 
-  Y = tf.matmul(fc2_drop,W11)+b11
+  Y = tf.matmul(fc2,W11)+b11
   Y_class = tf.matmul(Y,label_pred_transform_W)
   #Y_soft = tf.nn.softmax(Y_class)
 
@@ -519,8 +516,8 @@ if __name__ == '__main__':
     sess.run(tf.local_variables_initializer())
 
     # Restore variables from disk.
-    saver.restore(sess, "./checkpoint/model_trained_90000.ckpt")
-    print "Model %s restored." % ("model_trained_90000")
+    saver.restore(sess, "./checkpoint/model_small_trained.ckpt")
+    print "Model %s restored." % ("model_small_trained")
 
 
     # Create a coordinator and run all QueueRunner objects
@@ -535,30 +532,29 @@ if __name__ == '__main__':
     valid_accuracy = 0.0
     valid_IOU = 0.0
     time_start=time.time()
-    for i in range(0,200):
+    for i in range(0,100):
       test_x, test_y, box_coord = sess.run([valid_images, valid_labels, vl_box_coors])
       Y_labels_with_grid = expandLabel(test_y, box_coord, 100)
 
-      pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
+      pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord})
 
    
-      valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
+      valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord})
       valid_IOU += np.mean(checkIOU(box_coord, pred_bbox))
 
-      for j in range(0, 100):
-        bbox_image = drawBBox(test_x[j],pred_bbox[j], box_coord[j])
-        #print "Image: ", bbox_image
-        print np.argmax(test_y[j])
-        print look_up_label_dict[np.argmax(test_y[j])]
-        io.imsave("%s_%d_%s.%s" % ("./val_images/test_img", 100*i+j, look_up_label_dict[np.argmax(test_y[j])], 'jpg'), test_x[j]/256.0)
-        #imsave("%s_%d_%s.%s" % ("./val_images/test_img", 100*i+j, look_up_label_dict[np.argmax(test_y[j])], 'jpg'), test_x[j])
+      #for j in range(0, 100):
+      #  bbox_image = drawBBox(test_x[j],pred_bbox[j], box_coord[j])
+      #  #print "Image: ", bbox_image
+      #  #print np.argmax(test_y[j])
+      #  #print look_up_label_dict[np.argmax(test_y[j])]
+      #  io.imsave("%s_%d_%s.%s" % ("./val_images/test_img", 100*i+j, look_up_label_dict[np.argmax(test_y[j])], 'jpg'), test_x[j]/256.0)
 
     time_end = time.time()
     resultRunTime = time_end-time_start
     print "Spent time: ", resultRunTime  
-    print "FPS: ", 20000/resultRunTime  
-    print "Validation Accuracy: %f (%.1f/20000)" %  (valid_accuracy/20000, valid_accuracy)
-    print "Validation Mean IOU: %f (%.1f/200)" %  (valid_IOU/200, valid_IOU)
+    print "FPS: ", 10000/resultRunTime  
+    print "Validation Accuracy: %f (%.1f/10000)" %  (valid_accuracy/10000, valid_accuracy)
+    print "Validation Mean IOU: %f (%.1f/100)" %  (valid_IOU/100, valid_IOU)
 
 
 

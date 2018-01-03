@@ -9,7 +9,7 @@ from PIL import Image
 from skimage import io
 from skimage import transform
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="6,7"
+os.environ["CUDA_VISIBLE_DEVICES"]="4,5"
 #import matplotlib.pyplot as plt
 
 def limitWithinOne(val):
@@ -247,31 +247,31 @@ if __name__ == '__main__':
   mini_batch = 128
 
   K = 98 # number of classes
-  G = 48 # number of grid cells
+  G = 144 # number of grid cells
   P = 4  # four parameters of the bounding boxes
-  NUM_FILTER_1 = 64
-  NUM_FILTER_2 = 64
-  NUM_FILTER_3 = 128
-  NUM_FILTER_4 = 128
-  NUM_FILTER_5 = 256
-  NUM_FILTER_6 = 256
+  NUM_FILTER_1 = 32
+  NUM_FILTER_2 = 32
+  NUM_FILTER_3 = 64
+  NUM_FILTER_4 = 64
+  NUM_FILTER_5 = 128
+  NUM_FILTER_6 = 128
 
-  NUM_NEURON_1 = 2048
-  NUM_NEURON_2 = 2048
+  NUM_NEURON_1 = 1024
+  NUM_NEURON_2 = 1024
 
   DROPOUT_PROB = 1.0
 
-  LEARNING_RATE = 1e-3
+  LEARNING_RATE = 1e-2
  
 
   # Dropout probability
-  keep_prob     = tf.placeholder(tf.float32)
+  #keep_prob     = tf.placeholder(tf.float32)
 
 
   # initialize parameters randomly
   X      = tf.placeholder(tf.float32, shape=[None, 360,640,3])
   Y_     = tf.placeholder(tf.float32, shape=[None,K])
-  Y_GRID = tf.placeholder(tf.float32, shape=[None,G])
+  #Y_GRID = tf.placeholder(tf.float32, shape=[None,G])
   Y_BBOX = tf.placeholder(tf.float32, shape=[None,P])
 
 
@@ -342,12 +342,12 @@ if __name__ == '__main__':
   YY = tf.reshape(pool3, shape=[-1,23*27*NUM_FILTER_6])
 
   fc1 = tf.nn.relu(tf.matmul(YY,W9)+b9)
-  fc1_drop = tf.nn.dropout(fc1, keep_prob)
+  #fc1_drop = tf.nn.dropout(fc1, keep_prob)
 
-  fc2 = tf.nn.relu(tf.matmul(fc1_drop,W10)+b10)
-  fc2_drop = tf.nn.dropout(fc2, keep_prob)
+  fc2 = tf.nn.relu(tf.matmul(fc1,W10)+b10)
+  #fc2_drop = tf.nn.dropout(fc2, keep_prob)
 
-  Y = tf.matmul(fc2_drop,W11)+b11
+  Y = tf.matmul(fc2,W11)+b11
   Y_class = tf.matmul(Y,label_pred_transform_W)
   #Y_soft = tf.nn.softmax(Y_class)
 
@@ -363,7 +363,7 @@ if __name__ == '__main__':
 
   mse_weight = np.full(K+P,0.5)
   for i in range(K, K+P):
-    mse_weight = 0.005
+    mse_weight = 0.01
 
   #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds, weights=mse_weight)
   mse_loss = tf.losses.mean_squared_error(labels=Y_BBOX, predictions=Y_bbox)
@@ -504,8 +504,8 @@ if __name__ == '__main__':
     sess.run(tf.local_variables_initializer())
 
     # Restore variables from disk.
-    #saver.restore(sess, "./checkpoint/model_90000.ckpt")
-    #print "Model %s restored." % ("model_90000")
+    saver.restore(sess, "./checkpoint/model_small_trained.ckpt")
+    print "Model %s restored." % ("model_small_trained")
 
 
     # Create a coordinator and run all QueueRunner objects
@@ -516,9 +516,6 @@ if __name__ == '__main__':
 
 
 
-    image_iterator = 0
-    data = []
-    label = []
     for itr in xrange(100000):
       #x, y = batchRead(image_name, class_dict, mean_img, pool)
 
@@ -526,15 +523,14 @@ if __name__ == '__main__':
       #asyn_0, asyn_1, asyn_2, asyn_3, asyn_4, asyn_5, asyn_6, asyn_7, asyn_train_y = setAsynBatchRead(class_name, pool, mean_img)
       #start_time = time.time()
 
-      #x, y, image_iterator, data, label = batchSerialRead(image_iterator, data, label)
       #x, y = sess.run([train_image, train_label])
       x, y, box_coord = sess.run([train_images, train_labels, tr_box_coors])
-      Y_labels_with_grid = expandLabel(y, box_coord, mini_batch)
+      #Y_labels_with_grid = expandLabel(y, box_coord, mini_batch)
 
-      box_coord[:,0] = box_coord[:,0]
-      box_coord[:,1] = box_coord[:,1]
-      box_coord[:,2] = box_coord[:,2]
-      box_coord[:,3] = box_coord[:,3]
+      #box_coord[:,0] = box_coord[:,0]
+      #box_coord[:,1] = box_coord[:,1]
+      #box_coord[:,2] = box_coord[:,2]
+      #box_coord[:,3] = box_coord[:,3]
 
       #print "box_coord[0]: ", box_coord[:,0]
       #print "box_coord[1]: ", box_coord[:,1]
@@ -547,39 +543,39 @@ if __name__ == '__main__':
       #  io.imsave("%s_%d.%s" % ("test_img", i, 'jpeg'), x[i])
       
       #train_step.run(feed_dict={X: x, Y_: lump_y, keep_prob: DROPOUT_PROB})
-      train_step.run(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: DROPOUT_PROB})
+      train_step.run(feed_dict={X: x, Y_: y, Y_BBOX: box_coord})
       #elapsed_time = time.time() - start_time
       #print "Time for training: %f" % elapsed_time
       if itr % 20 == 0:
-        pred_bbox = Y_bbox.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
+        pred_bbox = Y_bbox.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord})
         #print "pred_bbox: ", pred_bbox
         #tt = np.mean(checkIOU(box_coord, pred_bbox))
         #print tt
         #print tt.shape
-        print "Iter %d:  learning rate: %f  dropout: %.1f cross entropy: %f  accuracy: %f  mean IOU: %f" % (itr,
+        print "Iter %d:  learning rate: %f  cross entropy: %f  mse: %f  accuracy: %f  mean IOU: %f" % (itr,
                                                                 #LEARNING_RATE,
-                                                                lr.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
-                                                                DROPOUT_PROB,
-                                                                total_loss.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
+                                                                lr.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord}),
+                                                                cross_entropy.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord}),
+                                                                mse_loss.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord}),
                                                                 #cross_entropy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0}),
-                                                                accuracy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0}),
+                                                                accuracy.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord}),
                                                                 np.mean(checkIOU(box_coord, pred_bbox)))
 
-      if itr % 1000 == 0:
+      if itr % 1000 == 0 and itr != 0:
         valid_accuracy = 0.0
         valid_IOU = 0.0
         for i in range(0,200):
           test_x, test_y, box_coord = sess.run([valid_images, valid_labels, vl_box_coors])
-          Y_labels_with_grid = expandLabel(test_y, box_coord, 100)
-          box_coord[:,0] = box_coord[:,0]
-          box_coord[:,1] = box_coord[:,1]
-          box_coord[:,2] = box_coord[:,2]
-          box_coord[:,3] = box_coord[:,3]
+          #Y_labels_with_grid = expandLabel(test_y, box_coord, 100)
+          #box_coord[:,0] = box_coord[:,0]
+          #box_coord[:,1] = box_coord[:,1]
+          #box_coord[:,2] = box_coord[:,2]
+          #box_coord[:,3] = box_coord[:,3]
 
-          pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
+          pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord})
 
    
-          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_GRID: Y_labels_with_grid, Y_BBOX: box_coord, keep_prob: 1.0})
+          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord})
           valid_IOU += np.mean(checkIOU(box_coord, pred_bbox))
         print "Validation Accuracy: %f (%.1f/20000)" %  (valid_accuracy/20000, valid_accuracy)
         print "Validation Mean IOU: %f (%.1f/200)" %  (valid_IOU/200, valid_IOU)
@@ -588,8 +584,8 @@ if __name__ == '__main__':
 
        
 
-      if itr % 10000 == 0 and itr != 0:
-        model_name = "./checkpoint/model_%d.ckpt" % itr
+      if itr % 10000 == 0:
+        model_name = "./checkpoint/model_small_%d.ckpt" % itr
         save_path = saver.save(sess, model_name)
         #save_path = saver.save(sess, "./checkpoint/model.ckpt")
         print("Model saved in file: %s" % save_path)
@@ -597,7 +593,7 @@ if __name__ == '__main__':
 
 
 
-    model_name = "./checkpoint/model_trained.ckpt"
+    model_name = "./checkpoint/model_small_trained.ckpt"
     save_path = saver.save(sess, model_name)
     #save_path = saver.save(sess, "./checkpoint/model.ckpt")
     print("Model saved in file: %s" % save_path)
