@@ -1,7 +1,6 @@
 #!/usr/bin/python
 
 import numpy as np
-import os
 import csv
 import tensorflow as tf
 import time
@@ -49,6 +48,7 @@ def checkIOU(label_BBox, pred_BBox):
   for i in range(label_BBox.shape[0]):
     ###############################
     #  check validity of pred box #
+    #   (xmin, xmax, ymin, ymax)  #
     ###############################
     if pred_BBox[i][0] >= pred_BBox[i][1] or pred_BBox[i][2] >= pred_BBox[i][3]:
       IOU[i] = 0
@@ -91,9 +91,15 @@ def checkIOU(label_BBox, pred_BBox):
         ymin_intersection = np.maximum(ymin_A, ymin_B)
         ymax_intersection = np.minimum(ymax_A, ymax_B)
 
-        intersection_area = (xmax_intersection-xmin_intersection)*(ymax_intersection-ymin_intersection)
-        area_two_boxes = (xmax_A-xmin_A)*(ymax_A-ymin_A) + (xmax_B-xmin_B)*(ymax_B-ymin_B)
-        IOU[i] = intersection_area/(area_two_boxes-intersection_area) 
+        intersection_width  = xmax_intersection-xmin_intersection
+        intersection_height = ymax_intersection-ymin_intersection
+
+        if intersection_width < 0 or intersection_height < 0:
+          IOU[i] = 0
+        else:
+          intersection_area = intersection_width*intersection_height
+          area_two_boxes = (xmax_A-xmin_A)*(ymax_A-ymin_A) + (xmax_B-xmin_B)*(ymax_B-ymin_B)
+          IOU[i] = intersection_area/(area_two_boxes-intersection_area) 
 
         #print "intersection_area: ", intersection_area
         #print "area_two_boxes: ", area_two_boxes
@@ -247,7 +253,7 @@ if __name__ == '__main__':
   mini_batch = 128
 
   K = 98 # number of classes
-  G = 144 # number of grid cells
+  G = 576 # number of grid cells
   P = 4  # four parameters of the bounding boxes
   NUM_FILTER_1 = 32
   NUM_FILTER_2 = 32
@@ -261,7 +267,7 @@ if __name__ == '__main__':
 
   DROPOUT_PROB = 1.0
 
-  LEARNING_RATE = 1e-2
+  LEARNING_RATE = 1e-3
  
 
   # Dropout probability
@@ -340,17 +346,17 @@ if __name__ == '__main__':
   print "pool3: ", pool3.get_shape()
 
   YY = tf.reshape(pool3, shape=[-1,23*27*NUM_FILTER_6])
-
+  
   fc1 = tf.nn.relu(tf.matmul(YY,W9)+b9)
   #fc1_drop = tf.nn.dropout(fc1, keep_prob)
-
+  
   fc2 = tf.nn.relu(tf.matmul(fc1,W10)+b10)
   #fc2_drop = tf.nn.dropout(fc2, keep_prob)
-
+  
   Y = tf.matmul(fc2,W11)+b11
   Y_class = tf.matmul(Y,label_pred_transform_W)
   #Y_soft = tf.nn.softmax(Y_class)
-
+  
   Y_bbox = tf.matmul(tf.nn.relu(Y),W_bbox)+b_bbox
 
   #total_preds  = tf.concat([Y_soft,Y_bbox],-1)
@@ -361,9 +367,9 @@ if __name__ == '__main__':
   #cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y))
   #mse_loss = tf.losses.mean_squared_error(labels=Y_, predictions=Y_soft)
 
-  mse_weight = np.full(K+P,0.5)
-  for i in range(K, K+P):
-    mse_weight = 0.01
+  #mse_weight = np.full(K+P,0.5)
+  #for i in range(K, K+P):
+  #  mse_weight = 0.01
 
   #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds, weights=mse_weight)
   mse_loss = tf.losses.mean_squared_error(labels=Y_BBOX, predictions=Y_bbox)
@@ -373,7 +379,7 @@ if __name__ == '__main__':
 
   global_step = tf.Variable(0, trainable=False)
   lr = tf.train.exponential_decay(LEARNING_RATE, global_step,
-                                  100000, 0.1, staircase=True)
+                                  250000, 0.1, staircase=True)
   #train_step = tf.train.MomentumOptimizer(LEARNING_RATE, 0.9, use_nesterov=True).minimize(total_loss)
   train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(total_loss, global_step=global_step)
   #train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(cross_entropy, global_step=global_step)
@@ -503,9 +509,12 @@ if __name__ == '__main__':
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
 
-    # Restore variables from disk.
-    saver.restore(sess, "./checkpoint/model_small_trained.ckpt")
-    print "Model %s restored." % ("model_small_trained")
+
+    ###############################
+    # Restore variables from disk #
+    ###############################
+    #saver.restore(sess, "./checkpoint/model_small_trained.ckpt")
+    #print "Model %s restored." % ("model_small_trained")
 
 
     # Create a coordinator and run all QueueRunner objects
@@ -515,8 +524,8 @@ if __name__ == '__main__':
     #x, y = batchRead(class_name, mean_img, pool)
 
 
-
-    for itr in xrange(100000):
+    highest_IOU = 0
+    for itr in xrange(250000):
       #x, y = batchRead(image_name, class_dict, mean_img, pool)
 
       #print y
@@ -564,7 +573,7 @@ if __name__ == '__main__':
       if itr % 1000 == 0 and itr != 0:
         valid_accuracy = 0.0
         valid_IOU = 0.0
-        for i in range(0,200):
+        for i in range(0,100):
           test_x, test_y, box_coord = sess.run([valid_images, valid_labels, vl_box_coors])
           #Y_labels_with_grid = expandLabel(test_y, box_coord, 100)
           #box_coord[:,0] = box_coord[:,0]
@@ -577,26 +586,31 @@ if __name__ == '__main__':
    
           valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord})
           valid_IOU += np.mean(checkIOU(box_coord, pred_bbox))
-        print "Validation Accuracy: %f (%.1f/20000)" %  (valid_accuracy/20000, valid_accuracy)
-        print "Validation Mean IOU: %f (%.1f/200)" %  (valid_IOU/200, valid_IOU)
+        print "Validation Accuracy: %f (%.1f/10000)" %  (valid_accuracy/10000, valid_accuracy)
+        print "Validation Mean IOU: %f (%.1f/100)" %  (valid_IOU/100, valid_IOU)
         #valid_result.write("Validation Accuracy: %f" % (valid_accuracy/20000))
         #valid_result.write("\n")
+        if valid_IOU > highest_IOU:
+          highest_IOU = valid_IOU
+          model_name = "./checkpoint/model_small_%.2f_%d.ckpt" % (valid_IOU, itr)
+          save_path = saver.save(sess, model_name)
+          print("Model saved in file: %s" % save_path)
 
        
 
-      if itr % 10000 == 0:
-        model_name = "./checkpoint/model_small_%d.ckpt" % itr
-        save_path = saver.save(sess, model_name)
-        #save_path = saver.save(sess, "./checkpoint/model.ckpt")
-        print("Model saved in file: %s" % save_path)
+      #if itr % 10000 == 0 and itr != 0:
+      #  model_name = "./checkpoint/model_small_%d.ckpt" % itr
+      #  save_path = saver.save(sess, model_name)
+      #  #save_path = saver.save(sess, "./checkpoint/model.ckpt")
+      #  print("Model saved in file: %s" % save_path)
 
 
 
 
-    model_name = "./checkpoint/model_small_trained.ckpt"
-    save_path = saver.save(sess, model_name)
-    #save_path = saver.save(sess, "./checkpoint/model.ckpt")
-    print("Model saved in file: %s" % save_path)
+    #model_name = "./checkpoint/model_small_trained.ckpt"
+    #save_path = saver.save(sess, model_name)
+    ##save_path = saver.save(sess, "./checkpoint/model.ckpt")
+    #print("Model saved in file: %s" % save_path)
 
 
     coord.request_stop()
