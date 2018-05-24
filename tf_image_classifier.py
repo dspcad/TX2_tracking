@@ -8,6 +8,7 @@ from PIL import Image
 from skimage import io
 from skimage import transform
 import os
+import sys
 os.environ["CUDA_VISIBLE_DEVICES"]="4,5"
 #import matplotlib.pyplot as plt
 
@@ -255,6 +256,8 @@ if __name__ == '__main__':
   K = 98 # number of classes
   G = 576 # number of grid cells
   P = 4  # four parameters of the bounding boxes
+  lamda = 0.01
+
   NUM_FILTER_1 = 32
   NUM_FILTER_2 = 32
   NUM_FILTER_3 = 64
@@ -265,13 +268,16 @@ if __name__ == '__main__':
   NUM_NEURON_1 = 1024
   NUM_NEURON_2 = 1024
 
-  DROPOUT_PROB = 1.0
+  DROPOUT_PROB = float(sys.argv[1])
+  LEARNING_RATE = float(sys.argv[2])
 
-  LEARNING_RATE = 1e-3
+  print 'Settings: '
+  print '    Dropout: ', DROPOUT_PROB
+  print '    Learning Rate: : ', LEARNING_RATE
  
 
   # Dropout probability
-  #keep_prob     = tf.placeholder(tf.float32)
+  keep_prob     = tf.placeholder(tf.float32)
 
 
   # initialize parameters randomly
@@ -281,17 +287,26 @@ if __name__ == '__main__':
   Y_BBOX = tf.placeholder(tf.float32, shape=[None,P])
 
 
-  W1  = tf.get_variable("W1", shape=[6,10,3,NUM_FILTER_1], initializer=tf.contrib.layers.xavier_initializer())
-  W2  = tf.get_variable("W2", shape=[3,3,NUM_FILTER_1,NUM_FILTER_2], initializer=tf.contrib.layers.xavier_initializer())
-  W3  = tf.get_variable("W3", shape=[3,3,NUM_FILTER_2,NUM_FILTER_3], initializer=tf.contrib.layers.xavier_initializer())
-  W4  = tf.get_variable("W4", shape=[3,3,NUM_FILTER_3,NUM_FILTER_4], initializer=tf.contrib.layers.xavier_initializer())
-  W5  = tf.get_variable("W5", shape=[3,3,NUM_FILTER_4,NUM_FILTER_5], initializer=tf.contrib.layers.xavier_initializer())
-  W6  = tf.get_variable("W6", shape=[3,3,NUM_FILTER_5,NUM_FILTER_6], initializer=tf.contrib.layers.xavier_initializer())
+  W1  = tf.get_variable("W1", shape=[6,10,3,NUM_FILTER_1], 
+                        initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
+  W2  = tf.get_variable("W2", shape=[3,3,NUM_FILTER_1,NUM_FILTER_2], 
+                        initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
+  W3  = tf.get_variable("W3", shape=[3,3,NUM_FILTER_2,NUM_FILTER_3], 
+                        initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
+  W4  = tf.get_variable("W4", shape=[3,3,NUM_FILTER_3,NUM_FILTER_4], 
+                        initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
+  W5  = tf.get_variable("W5", shape=[3,3,NUM_FILTER_4,NUM_FILTER_5], 
+                        initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
+  W6  = tf.get_variable("W6", shape=[3,3,NUM_FILTER_5,NUM_FILTER_6], 
+                        initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
 
-  W9  = tf.get_variable("W9", shape=[23*27*NUM_FILTER_6,NUM_NEURON_1], initializer=tf.contrib.layers.xavier_initializer())
-  W10 = tf.get_variable("W10", shape=[NUM_NEURON_1,NUM_NEURON_2], initializer=tf.contrib.layers.xavier_initializer())
+  W9  = tf.get_variable("W9", shape=[23*27*NUM_FILTER_6,NUM_NEURON_1], 
+                        initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
+  W10 = tf.get_variable("W10", shape=[NUM_NEURON_1,NUM_NEURON_2], 
+                        initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
   #W11 = tf.get_variable("W11", shape=[NUM_NEURON_2,K], initializer=tf.contrib.layers.xavier_initializer())
-  W11 = tf.get_variable("W11", shape=[NUM_NEURON_2,K*G], initializer=tf.contrib.layers.xavier_initializer())
+  W11 = tf.get_variable("W11", shape=[NUM_NEURON_2,K*G], 
+                        initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
 
 
 
@@ -312,10 +327,16 @@ if __name__ == '__main__':
       matrix_w[i*G+j][i] = 1
 
   label_pred_transform_W = tf.constant(matrix_w, shape=matrix_w.shape, dtype=tf.float32)
+  tf.stop_gradient(label_pred_transform_W)
 
 
-  W_bbox = tf.get_variable("W_bbox", shape=[K*G,P], initializer=tf.contrib.layers.xavier_initializer())
+  W_bbox = tf.get_variable("W_bbox", shape=[K*G,P], initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
   b_bbox = tf.Variable(tf.constant(0.1, shape=[P], dtype=tf.float32), trainable=True, name='b_bbox')
+
+
+
+
+
 
   #===== architecture =====#
   conv1 = tf.nn.relu(tf.nn.conv2d(X,     W1, strides=[1,2,3,1], padding='VALID')+b1)
@@ -374,14 +395,16 @@ if __name__ == '__main__':
   #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds, weights=mse_weight)
   mse_loss = tf.losses.mean_squared_error(labels=Y_BBOX, predictions=Y_bbox)
   cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y_class))
-  total_loss = 1e-4*mse_loss+1e-3*cross_entropy
+  reg_loss = sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+  
+  total_loss = 2e-4*mse_loss + 1e-3*cross_entropy + reg_loss
   #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds)
 
-  global_step = tf.Variable(0, trainable=False)
-  lr = tf.train.exponential_decay(LEARNING_RATE, global_step,
-                                  250000, 0.1, staircase=True)
+  #global_step = tf.Variable(0, trainable=False)
+  #lr = tf.train.exponential_decay(LEARNING_RATE, global_step,
+  #                                250000, 0.1, staircase=True)
   #train_step = tf.train.MomentumOptimizer(LEARNING_RATE, 0.9, use_nesterov=True).minimize(total_loss)
-  train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(total_loss, global_step=global_step)
+  train_step = tf.train.MomentumOptimizer(LEARNING_RATE, 0.9).minimize(total_loss)
   #train_step = tf.train.MomentumOptimizer(lr, 0.9).minimize(cross_entropy, global_step=global_step)
   #train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy, global_step=global_step)
 
@@ -445,8 +468,10 @@ if __name__ == '__main__':
 
     # Reshape image data into the original shape
     train_image = tf.reshape(train_image, [360, 640, 3])
+    # train_image = tf.image.per_image_standardization(train_image)
 
     #train_image = tf.image.resize_images(train_image, [640, 640])
+    #train_image = tf.image.random_flip_left_right(train_image)
 
     train_label_box_coor = tf.stack([train_label_xmin, train_label_xmax, train_label_ymin, train_label_ymax])
 
@@ -489,6 +514,7 @@ if __name__ == '__main__':
 
     # Reshape image data into the original shape
     valid_image = tf.reshape(valid_image, [360, 640, 3])
+    # valid_image = tf.image.per_image_standardization(valid_image)
 
     #valid_image = tf.image.resize_images(valid_image, [640, 640])
 
@@ -496,7 +522,7 @@ if __name__ == '__main__':
     
 
     valid_images, valid_labels, vl_box_coors = tf.train.batch([valid_image, valid_label, valid_label_box_coor], 
-                                                 batch_size=100, capacity=2000, num_threads=16)
+                                                 batch_size=100, capacity=1000, num_threads=16)
 
 
 
@@ -513,8 +539,9 @@ if __name__ == '__main__':
     ###############################
     # Restore variables from disk #
     ###############################
-    #saver.restore(sess, "./checkpoint/model_small_trained.ckpt")
-    #print "Model %s restored." % ("model_small_trained")
+    #model_name = "model_small_45.89_107000"
+    #saver.restore(sess, "./checkpoint/%s.ckpt" % model_name)
+    #print "Model %s restored." % model_name
 
 
     # Create a coordinator and run all QueueRunner objects
@@ -525,7 +552,7 @@ if __name__ == '__main__':
 
 
     highest_IOU = 0
-    for itr in xrange(250000):
+    for itr in xrange(300000):
       #x, y = batchRead(image_name, class_dict, mean_img, pool)
 
       #print y
@@ -552,22 +579,23 @@ if __name__ == '__main__':
       #  io.imsave("%s_%d.%s" % ("test_img", i, 'jpeg'), x[i])
       
       #train_step.run(feed_dict={X: x, Y_: lump_y, keep_prob: DROPOUT_PROB})
-      train_step.run(feed_dict={X: x, Y_: y, Y_BBOX: box_coord})
+      train_step.run(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: DROPOUT_PROB})
       #elapsed_time = time.time() - start_time
       #print "Time for training: %f" % elapsed_time
       if itr % 20 == 0:
-        pred_bbox = Y_bbox.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord})
+        pred_bbox = Y_bbox.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: 1.0})
         #print "pred_bbox: ", pred_bbox
         #tt = np.mean(checkIOU(box_coord, pred_bbox))
         #print tt
         #print tt.shape
-        print "Iter %d:  learning rate: %f  cross entropy: %f  mse: %f  accuracy: %f  mean IOU: %f" % (itr,
-                                                                #LEARNING_RATE,
-                                                                lr.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord}),
-                                                                cross_entropy.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord}),
-                                                                mse_loss.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord}),
-                                                                #cross_entropy.eval(feed_dict={X: x, Y_: y, Y_GRID: Y_labels_with_grid, keep_prob: 1.0}),
-                                                                accuracy.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord}),
+        print "Iter %d:  learning rate: %f  cross entropy: %f  mse: %f  reg: %f  accuracy: %f  mean IOU: %f" % (itr,
+                                                                LEARNING_RATE,
+                                                                #lr.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord}),
+                                                                cross_entropy.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: 1.0}),
+                                                                mse_loss.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: 1.0}),
+                                                                #reg_loss,
+                                                                reg_loss.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: 1.0}),
+                                                                accuracy.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: 1.0}),
                                                                 np.mean(checkIOU(box_coord, pred_bbox)))
 
       if itr % 1000 == 0 and itr != 0:
@@ -581,10 +609,10 @@ if __name__ == '__main__':
           #box_coord[:,2] = box_coord[:,2]
           #box_coord[:,3] = box_coord[:,3]
 
-          pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord})
+          pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord, keep_prob: 1.0})
 
    
-          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord})
+          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord, keep_prob: 1.0})
           valid_IOU += np.mean(checkIOU(box_coord, pred_bbox))
         print "Validation Accuracy: %f (%.1f/10000)" %  (valid_accuracy/10000, valid_accuracy)
         print "Validation Mean IOU: %f (%.1f/100)" %  (valid_IOU/100, valid_IOU)
@@ -598,7 +626,8 @@ if __name__ == '__main__':
 
        
 
-      #if itr % 10000 == 0 and itr != 0:
+      #if itr % 5000 == 0 and itr != 0:
+      #  LEARNING_RATE = 0.1*LEARNING_RATE
       #  model_name = "./checkpoint/model_small_%d.ckpt" % itr
       #  save_path = saver.save(sess, model_name)
       #  #save_path = saver.save(sess, "./checkpoint/model.ckpt")
