@@ -15,10 +15,10 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 
 def drawBBox(img, pred_coordinates, ground_truth_coordinates):
-  xmin = int(clipWidth(pred_coordinates[0])) - 1
-  xmax = int(clipWidth(pred_coordinates[1])) - 1
-  ymin = int(clipHeight(pred_coordinates[2])) - 1
-  ymax = int(clipHeight(pred_coordinates[3])) - 1
+  xmin = int(clipWidth(pred_coordinates[0])) 
+  xmax = int(clipWidth(pred_coordinates[1])) 
+  ymin = int(clipHeight(pred_coordinates[2])) 
+  ymax = int(clipHeight(pred_coordinates[3])) 
 
   #print "image shape: ", img.shape
   #print "coordinate: ", coordinates
@@ -85,20 +85,20 @@ def limitWithinOne(val):
   return val
 
 def clipWidth(val):
-  if val > 640:
-    return 640
+  if val > 639:
+    return 639
 
-  if val < 1:
-    return 1
+  if val < 0:
+    return 0
 
   return val
 
 def clipHeight(val):
-  if val > 360:
-    return 360
+  if val > 359:
+    return 359
 
-  if val < 1:
-    return 1
+  if val < 0:
+    return 0
 
   return val
 
@@ -308,7 +308,7 @@ if __name__ == '__main__':
   mini_batch = 128
 
   K = 98 # number of classes
-  G = 144 # number of grid cells
+  G = 576 # number of grid cells
   P = 4  # four parameters of the bounding boxes
   NUM_FILTER_1 = 32
   NUM_FILTER_2 = 32
@@ -364,7 +364,7 @@ if __name__ == '__main__':
   matrix_w = np.zeros((K*G,K))
   for i in range(0,K):
     for j in range(0,G):
-      matrix_w[i*G+j][i] = 1
+      matrix_w[i*G+j][i] = 0.1
 
   label_pred_transform_W = tf.constant(matrix_w, shape=matrix_w.shape, dtype=tf.float32)
 
@@ -458,7 +458,6 @@ if __name__ == '__main__':
   #train_data_path = []
   #for i in range(1,8):
   #  train_data_path.append("/home/hhwu/tracking/crop_data/train_boat%d.tfrecords" % i)
-  #train_data_path = "/home/hhwu/tracking/tf_data/train/train_person3.tfrecords"
   valid_data_path = "/home/hhwu/tracking/data_training/valid_all.tfrecords"
   #train_data_path = "/home/hhwu/tracking/crop_data/train_boat8.tfrecords"
 
@@ -516,8 +515,11 @@ if __name__ == '__main__':
     sess.run(tf.local_variables_initializer())
 
     # Restore variables from disk.
-    saver.restore(sess, "./checkpoint/model_small_trained.ckpt")
-    print "Model %s restored." % ("model_small_trained")
+    model_name = "model_small_64.26_227000"
+    #saver.restore(sess, "./checkpoint/%s.ckpt" % model_name)
+    saver.restore(sess, "./arsenal/fc_1024/%s.ckpt" % model_name)
+    print "Model %s restored." % model_name
+
 
 
     # Create a coordinator and run all QueueRunner objects
@@ -542,12 +544,23 @@ if __name__ == '__main__':
       valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord})
       valid_IOU += np.mean(checkIOU(box_coord, pred_bbox))
 
-      #for j in range(0, 100):
-      #  bbox_image = drawBBox(test_x[j],pred_bbox[j], box_coord[j])
-      #  #print "Image: ", bbox_image
-      #  #print np.argmax(test_y[j])
-      #  #print look_up_label_dict[np.argmax(test_y[j])]
-      #  io.imsave("%s_%d_%s.%s" % ("./val_images/test_img", 100*i+j, look_up_label_dict[np.argmax(test_y[j])], 'jpg'), test_x[j]/256.0)
+      for j in range(0, 100):
+        #io.imsave("%s%05d.%s" % ("./test_images/", 100*i+j, 'jpg'), test_x[j]/256.0)
+        bbox_image = drawBBox(test_x[j],pred_bbox[j], box_coord[j])
+        ##print "Image: ", bbox_image
+        ##print np.argmax(test_y[j])
+        ##print look_up_label_dict[np.argmax(test_y[j])]
+        #io.imsave("%s_%s_%06d.%s" % ("./val_images/test_img", look_up_label_dict[np.argmax(test_y[j])], 100*i+j, 'jpg'), test_x[j]/256.0)
+        io.imsave("%s_%06d.%s" % ("./val_images/img", 100*i+j, 'jpg'), test_x[j]/256.0)
+
+        pred_bbox[j][0] = int(clipWidth(pred_bbox[j][0])) 
+        pred_bbox[j][1] = int(clipWidth(pred_bbox[j][1])) 
+        pred_bbox[j][2] = int(clipHeight(pred_bbox[j][2])) 
+        pred_bbox[j][3] = int(clipHeight(pred_bbox[j][3])) 
+
+        #print pred_bbox[j]
+
+        
 
     time_end = time.time()
     resultRunTime = time_end-time_start
