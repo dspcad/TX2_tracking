@@ -41,9 +41,6 @@ def clipHeight(val):
 
 
 def checkIOU(label_BBox, pred_BBox):
-  #print "label_BBox shape: ", label_BBox.shape
-  #print "pred_BBox shape: ", pred_BBox.shape
-
   IOU = np.zeros(label_BBox.shape[0])
 
   for i in range(label_BBox.shape[0]):
@@ -51,118 +48,28 @@ def checkIOU(label_BBox, pred_BBox):
     #  check validity of pred box #
     #   (xmin, xmax, ymin, ymax)  #
     ###############################
-    if pred_BBox[i][0] >= pred_BBox[i][1] or pred_BBox[i][2] >= pred_BBox[i][3]:
-      IOU[i] = 0
-    else:
-      if checkIntersection(label_BBox[i], pred_BBox[i]) == 1:
+ 
+    # determine the (x, y)-coordinates of the intersection rectangle
+    xA = max(label_BBox[i][0], pred_BBox[i][0])
+    yA = max(label_BBox[i][2], pred_BBox[i][2])
+    xB = min(label_BBox[i][1], pred_BBox[i][1])
+    yB = min(label_BBox[i][3], pred_BBox[i][3])
+ 
+    # compute the area of intersection rectangle
+    interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+ 
+    # compute the area of both the prediction and ground-truth
+    # rectangles
+    boxAArea = (label_BBox[i][1] - label_BBox[i][0] + 1) * (label_BBox[i][3] - label_BBox[i][2] + 1)
+    boxBArea = (pred_BBox[i][1]  - pred_BBox[i][0] + 1) * (pred_BBox[i][3] - pred_BBox[i][2] + 1)
+ 
+    # compute the intersection over union by taking the intersection
+    # area and dividing it by the sum of prediction + ground-truth
+    # areas - the interesection area
+    IOU[i] = interArea / float(boxAArea + boxBArea - interArea)
 
-        #xmin_A = limitWithinOne(pred_BBox[i][0])
-        #xmax_A = limitWithinOne(pred_BBox[i][1])
-        #ymin_A = limitWithinOne(pred_BBox[i][2])
-        #ymax_A = limitWithinOne(pred_BBox[i][3])
-
-        xmin_A = clipWidth(pred_BBox[i][0])
-        xmax_A = clipWidth(pred_BBox[i][1])
-        ymin_A = clipHeight(pred_BBox[i][2])
-        ymax_A = clipHeight(pred_BBox[i][3])
-
-
-        xmin_B = label_BBox[i][0]
-        xmax_B = label_BBox[i][1]
-        ymin_B = label_BBox[i][2]
-        ymax_B = label_BBox[i][3]
-
-        #print "pred BBox[0]: ", xmin_A
-        #print "pred BBox[1]: ", xmax_A
-        #print "pred BBox[2]: ", ymin_A
-        #print "pred BBox[3]: ", ymax_A
-        #print "width A: ", (xmax_A-xmin_A)
-        #print "height A: ", (ymax_A-ymin_A)
-
-        #print "label BBox[0]: ", xmin_B
-        #print "label BBox[1]: ", xmax_B
-        #print "label BBox[2]: ", ymin_B
-        #print "label BBox[3]: ", ymax_B
-        #print "width B: ", (xmax_B-xmin_B)
-        #print "height B: ", (ymax_B-ymin_B)
-
-
-        xmin_intersection = np.maximum(xmin_A, xmin_B)
-        xmax_intersection = np.minimum(xmax_A, xmax_B)
-        ymin_intersection = np.maximum(ymin_A, ymin_B)
-        ymax_intersection = np.minimum(ymax_A, ymax_B)
-
-        intersection_width  = xmax_intersection-xmin_intersection
-        intersection_height = ymax_intersection-ymin_intersection
-
-        if intersection_width < 0 or intersection_height < 0:
-          IOU[i] = 0
-        else:
-          intersection_area = intersection_width*intersection_height
-          area_two_boxes = (xmax_A-xmin_A)*(ymax_A-ymin_A) + (xmax_B-xmin_B)*(ymax_B-ymin_B)
-          IOU[i] = intersection_area/(area_two_boxes-intersection_area) 
-
-        #print "intersection_area: ", intersection_area
-        #print "area_two_boxes: ", area_two_boxes
-        #print "IOU[%d]: %f" % (i, IOU[i])
-      else:
-        IOU[i] = 0
-      
-
-  #print "xmin_union: ", xmin_union
-  #print "ymin_union: ", ymin_union
-  #print "xmax_union: ", xmax_union
-  #print "ymax_union: ", ymax_union
-
-
-    
-  #print IOU
   return IOU
 
-def checkIntersection(BBoxA, BBoxB):
-  ###############################
-  #       shape[0]: height      #
-  #       shape[1]: width       #
-  ###############################
-
-  xmin = BBoxB[0] 
-  xmax = BBoxB[1]
-  ymin = BBoxB[2]
-  ymax = BBoxB[3]
-
-
-  #########################################
-  #     BBox intersects the grid cells    #
-  #########################################
-  target_x = BBoxA[0] #xmin
-  target_y = BBoxA[2] #ymin
-  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 1
-
-  target_x = BBoxA[0] #xmin
-  target_y = BBoxA[3] #ymax
-  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 1
-
-  target_x = BBoxA[1] #xmax
-  target_y = BBoxA[3] #ymax
-  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 1
-
-  target_x = BBoxA[1] #xmax
-  target_y = BBoxA[2] #ymin
-  if target_x >= xmin and target_x <= xmax and target_y >= ymin and target_y <= ymax:
-    return 1
- 
- 
-  #########################################
-  #       BBoxB is within in BBoxA        #
-  #########################################
-  if xmin >= BBoxA[0] and ymin >= BBoxA[2] and xmax <= BBoxA[1] and ymax <= BBoxA[3]:
-    return 1
-
-
-  return 0
 
 def checkIntersectionGrid(x, y, BBox):
   ###############################
@@ -252,9 +159,10 @@ if __name__ == '__main__':
   #  Configuration of CNN architecture    #
   #########################################
   mini_batch = 128
+  EPOCH = 676
 
   K = 98 # number of classes
-  G = 1024 # number of grid cells
+  G = 512 # number of grid cells
   P = 4  # four parameters of the bounding boxes
   lamda = 0.001
 
@@ -268,17 +176,15 @@ if __name__ == '__main__':
   NUM_NEURON_1 = 1024
   NUM_NEURON_2 = 1024
 
-  DROPOUT_PROB = float(sys.argv[1])
-  LEARNING_RATE = float(sys.argv[2])
+  LEARNING_RATE = float(sys.argv[1])
 
   print 'Settings: '
-  print '    Dropout: ', DROPOUT_PROB
   print '    Learning Rate: : ', LEARNING_RATE
  
 
   # Dropout probability
-  keep_prob     = tf.placeholder(tf.float32)
-  is_training    = tf.placeholder(tf.bool)
+  lr          = tf.placeholder(tf.float32)
+  is_training = tf.placeholder(tf.bool)
 
 
 
@@ -306,54 +212,71 @@ if __name__ == '__main__':
                         initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
   W10 = tf.get_variable("W10", shape=[NUM_NEURON_1,NUM_NEURON_2], 
                         initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
-  #W11 = tf.get_variable("W11", shape=[NUM_NEURON_2,K], initializer=tf.contrib.layers.xavier_initializer())
   W11 = tf.get_variable("W11", shape=[NUM_NEURON_2,K*G], 
                         initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
 
 
 
-  b1  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_1], dtype=tf.float32), trainable=True, name='b1')
-  b2  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_2], dtype=tf.float32), trainable=True, name='b2')
-  b3  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_3], dtype=tf.float32), trainable=True, name='b3')
-  b4  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_4], dtype=tf.float32), trainable=True, name='b4')
-  b5  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_5], dtype=tf.float32), trainable=True, name='b5')
-  b6  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_6], dtype=tf.float32), trainable=True, name='b6')
+#  b1  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_1], dtype=tf.float32), trainable=True, name='b1')
+#  b2  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_2], dtype=tf.float32), trainable=True, name='b2')
+#  b3  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_3], dtype=tf.float32), trainable=True, name='b3')
+#  b4  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_4], dtype=tf.float32), trainable=True, name='b4')
+#  b5  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_5], dtype=tf.float32), trainable=True, name='b5')
+#  b6  = tf.Variable(tf.constant(0.1, shape=[NUM_FILTER_6], dtype=tf.float32), trainable=True, name='b6')
   b9  = tf.Variable(tf.constant(0.1, shape=[NUM_NEURON_1], dtype=tf.float32), trainable=True, name='b9')
   b10 = tf.Variable(tf.constant(0.1, shape=[NUM_NEURON_2], dtype=tf.float32), trainable=True, name='b10')
   #b11 = tf.Variable(tf.constant(0.1, shape=[K], dtype=tf.float32), trainable=True, name='b11')
   b11 = tf.Variable(tf.constant(0.1, shape=[K*G], dtype=tf.float32), trainable=True, name='b11')
 
-  #matrix_w = np.zeros((K*G,K))
-  matrix_w = np.full((K*G,K), 0.001)
+  matrix_w = np.zeros((K*G,K))
   for i in range(0,K):
     for j in range(0,G):
       matrix_w[i*G+j][i] = 0.1
 
   label_pred_transform_W = tf.constant(matrix_w, shape=matrix_w.shape, dtype=tf.float32)
   tf.stop_gradient(label_pred_transform_W)
+  #label_pred_transform_W = tf.get_variable("W_class", shape=[K*G,K], initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
+  b_class = tf.Variable(tf.constant(0.1, shape=[K], dtype=tf.float32), trainable=True, name='b_class')
 
 
-  W_bbox = tf.get_variable("W_bbox", shape=[K*G,P], initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
-  b_bbox = tf.Variable(tf.constant(0.1, shape=[P], dtype=tf.float32), trainable=True, name='b_bbox')
+  matrix_wb = np.zeros((K*G,K*P))
+  #matrix_w = np.full((K*G,K), 0.001)
+  for i in range(0,K):
+    for j in range(0,G):
+      matrix_wb[i*G+j][i*P] = 0.1
+      matrix_wb[i*G+j][i*P+1] = 0.1
+      matrix_wb[i*G+j][i*P+2] = 0.1
+      matrix_wb[i*G+j][i*P+3] = 0.1
 
+  W_bbox_1  = tf.constant(matrix_wb, shape=matrix_wb.shape, dtype=tf.float32)
+  tf.stop_gradient(W_bbox_1)
+  #W_bbox_1 = tf.get_variable("W_bbox_1", shape=[K*G,K*P], initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
+  b_bbox_1 = tf.Variable(tf.constant(0.1, shape=[K*P], dtype=tf.float32), trainable=True, name='b_bbox_1')
+
+
+  #W_bbox_1 = tf.get_variable("W_bbox_1", shape=[K*G,K*P], initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
+  #b_bbox_1 = tf.Variable(tf.constant(0.1, shape=[K*P], dtype=tf.float32), trainable=True, name='b_bbox_1')
+
+  W_bbox_2 = tf.get_variable("W_bbox_2", shape=[K*P,P], initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(lamda))
+  b_bbox_2 = tf.Variable(tf.constant(0.1, shape=[P], dtype=tf.float32), trainable=True, name='b_bbox_2')
 
 
 
 
 
   #===== architecture =====#
-  conv1 = tf.nn.relu(tf.nn.conv2d(X,     W1, strides=[1,2,3,1], padding='VALID')+b1)
-  conv2 = tf.nn.conv2d(conv1, W2, strides=[1,1,1,1], padding='SAME')+b2
+  conv1 = tf.nn.relu(tf.nn.conv2d(X,     W1, strides=[1,2,3,1], padding='VALID'))
+  conv2 = tf.nn.conv2d(conv1, W2, strides=[1,1,1,1], padding='SAME')
   norm1 = tf.nn.relu(tf.layers.batch_normalization(conv2, training=is_training, renorm=True))
   pool1 = tf.nn.max_pool(norm1, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
  
-  conv3 = tf.nn.relu(tf.nn.conv2d(pool1, W3, strides=[1,1,1,1], padding='SAME')+b3)
-  conv4 = tf.nn.conv2d(conv3, W4, strides=[1,1,1,1], padding='SAME')+b4
+  conv3 = tf.nn.relu(tf.nn.conv2d(pool1, W3, strides=[1,1,1,1], padding='SAME'))
+  conv4 = tf.nn.conv2d(conv3, W4, strides=[1,1,1,1], padding='SAME')
   norm2 = tf.nn.relu(tf.layers.batch_normalization(conv4, training=is_training, renorm=True))
   pool2 = tf.nn.max_pool(norm2, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
  
-  conv5 = tf.nn.relu(tf.nn.conv2d(pool2, W5, strides=[1,1,1,1], padding='SAME')+b5)
-  conv6 = tf.nn.conv2d(conv5, W6, strides=[1,1,1,1], padding='SAME')+b6
+  conv5 = tf.nn.relu(tf.nn.conv2d(pool2, W5, strides=[1,1,1,1], padding='SAME'))
+  conv6 = tf.nn.conv2d(conv5, W6, strides=[1,1,1,1], padding='SAME')
   norm3 = tf.nn.relu(tf.layers.batch_normalization(conv6, training=is_training, renorm=True))
   pool3 = tf.nn.max_pool(norm3, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
 
@@ -391,17 +314,19 @@ if __name__ == '__main__':
 
   YY = tf.reshape(pool3, shape=[-1,23*27*NUM_FILTER_6])
   
+  #fc1 = tf.matmul(YY,W9)+b9
   fc1 = tf.nn.relu(tf.matmul(YY,W9)+b9)
   #fc1_drop = tf.nn.dropout(fc1, keep_prob)
   
-  fc2      = tf.matmul(fc1,W10)+b10
+  fc2 = tf.matmul(fc1,W10)+b10
   fc2_norm = tf.nn.relu(tf.layers.batch_normalization(fc2, training=is_training, renorm=True))
   #fc2_drop = tf.nn.dropout(fc2, keep_prob)
   
-  Y = tf.matmul(fc2,W11)+b11
+  Y = tf.matmul(fc2_norm,W11)+b11
   
-  Y_class = tf.matmul(Y,label_pred_transform_W)
-  Y_bbox  = tf.matmul(Y,W_bbox)+b_bbox
+  Y_class  = tf.matmul(Y,label_pred_transform_W)+b_class
+  Y_bbox_1 = tf.matmul(Y,W_bbox_1)+b_bbox_1
+  Y_bbox   = tf.matmul(Y_bbox_1,W_bbox_2)+b_bbox_2
 
 
   #total_preds  = tf.concat([Y_soft,Y_bbox],-1)
@@ -420,11 +345,14 @@ if __name__ == '__main__':
 
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
   with tf.control_dependencies(update_ops):
-    mse_loss = tf.losses.mean_squared_error(labels=Y_BBOX, predictions=Y_bbox)
-    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y_class))
+    mse_loss = tf.losses.mean_squared_error(labels=Y_BBOX, predictions=Y_bbox, weights=1e-3)
+    cross_entropy = tf.reduce_mean(tf.losses.softmax_cross_entropy(onehot_labels=Y_, logits=Y_class, weights=1e-2))
+    #cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=Y_, logits=Y_class))
     reg_loss = sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
     
-    total_loss = 1e-4*mse_loss + 1e-3*cross_entropy + reg_loss
+    total_loss = mse_loss + cross_entropy + reg_loss
+    #total_loss = mse_loss + reg_loss
+    #total_loss = 1e-4*mse_loss + 1e-3*cross_entropy
     #mse_loss = tf.losses.mean_squared_error(labels=total_labels, predictions=total_preds)
 
     #global_step = tf.Variable(0, trainable=False)
@@ -460,8 +388,8 @@ if __name__ == '__main__':
 
 
   mean_img = np.load("/home/hhwu/tracking/data_training/mean.npy")
+  #print mean_img
   #channel_mean = np.mean(mean_img, axis=(0,1))
-  print mean_img
   #print channel_mean
 
   with tf.Session() as sess:
@@ -476,7 +404,7 @@ if __name__ == '__main__':
                      'train/label': tf.FixedLenFeature([], tf.int64)}
     # Create a list of filenames and pass it to a queue
     #train_filename_queue = tf.train.string_input_producer(train_data_path, shuffle=True)
-    train_filename_queue = tf.train.string_input_producer([train_data_path])
+    train_filename_queue = tf.train.string_input_producer([train_data_path], shuffle=True, capacity=20*mini_batch)
     #filename_queue = tf.train.string_input_producer([data_path], num_epochs=1)
     # Define a reader and read the next record
     train_reader = tf.TFRecordReader()
@@ -505,16 +433,14 @@ if __name__ == '__main__':
     train_image = tf.subtract(train_image,mean_img)
     # train_image = tf.image.per_image_standardization(train_image)
 
-    sel = np.random.uniform(0,1)
-    if(sel <= 0.5):
-      train_image = tf.image.flip_left_right(train_image)
-      train_label_box_coor = tf.stack([639-train_label_xmax, 639-train_label_xmin, train_label_ymin, train_label_ymax])
-    #elif(sel <= 0.66):
-    #  train_image = tf.image.flip_up_down(train_image)
-    #  train_label_box_coor = tf.stack([train_label_xmin, train_label_xmax, 359-train_label_ymax, 359-train_label_ymin])
-    else:
-      train_label_box_coor = tf.stack([train_label_xmin, train_label_xmax, train_label_ymin, train_label_ymax])
+    #sel = np.random.uniform(0,1)
+    #if(sel <= 0.5):
+    #  train_image = tf.image.flip_left_right(train_image)
+    #  train_label_box_coor = tf.stack([639-train_label_xmax, 639-train_label_xmin, train_label_ymin, train_label_ymax])
+    #else:
+    #  train_label_box_coor = tf.stack([train_label_xmin, train_label_xmax, train_label_ymin, train_label_ymax])
 
+    train_label_box_coor = tf.stack([train_label_xmin, train_label_xmax, train_label_ymin, train_label_ymax])
 
 
 
@@ -526,6 +452,8 @@ if __name__ == '__main__':
     #print "TFRecord: hhwu !"
     train_images, train_labels, tr_box_coors = tf.train.batch([train_image, train_label, train_label_box_coor], 
                                                  batch_size=mini_batch, capacity=20*mini_batch, num_threads=16)
+    #train_images, train_labels, tr_box_coors = tf.train.shuffle_batch([train_image, train_label, train_label_box_coor], 
+    #                                             batch_size=mini_batch, capacity=20*mini_batch, num_threads=16, min_after_dequeue=1000)
     #train_images, train_labels = tf.train.batch([train_image, train_label], 
     #                                             batch_size=mini_batch, capacity=20*mini_batch, num_threads=16)
 
@@ -589,9 +517,9 @@ if __name__ == '__main__':
     ###############################
     # Restore variables from disk #
     ###############################
-    model_name = "model_small_48.65_226000"
-    saver.restore(sess, "./checkpoint/%s.ckpt" % model_name)
-    print "Model %s restored." % model_name
+    #model_name = "model_small_59.30_119000"
+    #saver.restore(sess, "./checkpoint/%s.ckpt" % model_name)
+    #print "Model %s restored." % model_name
 
 
     # Create a coordinator and run all QueueRunner objects
@@ -602,7 +530,8 @@ if __name__ == '__main__':
 
 
     highest_IOU = 0
-    for itr in xrange(300000):
+    epoch_num = 0
+    for itr in xrange(70000):
       #x, y = batchRead(image_name, class_dict, mean_img, pool)
 
       #print y
@@ -629,12 +558,12 @@ if __name__ == '__main__':
       #  io.imsave("%s_%d.%s" % ("test_img", i, 'jpeg'), x[i])
       
       #train_step.run(feed_dict={X: x, Y_: lump_y, keep_prob: DROPOUT_PROB})
-      sess.run([train_step,update_ops],feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: DROPOUT_PROB, is_training: True})
+      sess.run([train_step,update_ops],feed_dict={X: x, Y_: y, Y_BBOX: box_coord, lr: LEARNING_RATE, is_training: True})
       #train_step.run(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: DROPOUT_PROB, is_training: True})
       #elapsed_time = time.time() - start_time
       #print "Time for training: %f" % elapsed_time
       if itr % 20 == 0:
-        pred_bbox = Y_bbox.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: 1.0, is_training: False})
+        pred_bbox = Y_bbox.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, lr: LEARNING_RATE, is_training: False})
         #print "pred_bbox: ", pred_bbox
         #tt = np.mean(checkIOU(box_coord, pred_bbox))
         #print tt
@@ -642,14 +571,18 @@ if __name__ == '__main__':
         print "Iter %d:  learning rate: %f  cross entropy: %f  mse: %f  reg: %f  accuracy: %f  mean IOU: %f" % (itr,
                                                                 LEARNING_RATE,
                                                                 #lr.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord}),
-                                                                cross_entropy.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: 1.0, is_training: False}),
-                                                                mse_loss.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: 1.0, is_training: False}),
+                                                                cross_entropy.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, lr: LEARNING_RATE, is_training: False}),
+                                                                mse_loss.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, lr: LEARNING_RATE, is_training: False}),
                                                                 #reg_loss,
-                                                                reg_loss.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: 1.0, is_training: False}),
-                                                                accuracy.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, keep_prob: 1.0, is_training: False}),
+                                                                reg_loss.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, lr: LEARNING_RATE, is_training: False}),
+                                                                accuracy.eval(feed_dict={X: x, Y_: y, Y_BBOX: box_coord, lr: LEARNING_RATE, is_training: False}),
                                                                 np.mean(checkIOU(box_coord, pred_bbox)))
 
-      if itr % 1000 == 0 and itr != 0:
+      #if itr % 20 == 0 and itr != 0:
+      if itr % EPOCH == 0 and itr != 0:
+        epoch_num = epoch_num + 1
+        print "Epoch ", epoch_num
+
         valid_accuracy = 0.0
         valid_IOU = 0.0
         for i in range(0,100):
@@ -660,13 +593,20 @@ if __name__ == '__main__':
           #box_coord[:,2] = box_coord[:,2]
           #box_coord[:,3] = box_coord[:,3]
 
-          pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord, keep_prob: 1.0, is_training: False})
+          pred_bbox = Y_bbox.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord, lr: LEARNING_RATE, is_training: False})
 
    
-          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord, keep_prob: 1.0, is_training: False})
+          valid_accuracy += correct_sum.eval(feed_dict={X: test_x, Y_: test_y, Y_BBOX: box_coord, lr: LEARNING_RATE, is_training: False})
           valid_IOU += np.mean(checkIOU(box_coord, pred_bbox))
         print "Validation Accuracy: %f (%.1f/10000)" %  (valid_accuracy/10000, valid_accuracy)
         print "Validation Mean IOU: %f (%.1f/100)" %  (valid_IOU/100, valid_IOU)
+
+
+        f_train = open("history_train.txt","a") 
+        f_train.write("Validation Accuracy: %f (%.1f/10000) " %  (valid_accuracy/10000, valid_accuracy))
+        f_train.write("Validation Mean IOU: %f (%.1f/100)\n" %  (valid_IOU/100, valid_IOU)) 
+        f_train.close() 
+
         #valid_result.write("Validation Accuracy: %f" % (valid_accuracy/20000))
         #valid_result.write("\n")
         if valid_IOU > highest_IOU:
@@ -677,8 +617,12 @@ if __name__ == '__main__':
 
        
 
-      #if itr % 5000 == 0 and itr != 0:
-      #  LEARNING_RATE = 0.1*LEARNING_RATE
+      if epoch_num == 20:
+        LEARNING_RATE = 1e-4
+
+
+      if epoch_num == 60:
+        LEARNING_RATE = 1e-6
       #  model_name = "./checkpoint/model_small_%d.ckpt" % itr
       #  save_path = saver.save(sess, model_name)
       #  #save_path = saver.save(sess, "./checkpoint/model.ckpt")
